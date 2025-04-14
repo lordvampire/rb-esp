@@ -1,7 +1,25 @@
 #include "QMI8658.h"
+#include "lvgl.h"
 
 IMUdata Accel;
 IMUdata Gyro;
+
+IMUdata AccelFiltered;
+IMUdata AccelFilteredMax;
+IMUdata GyroFiltered;
+IMUdata GyroBias;
+
+float GFactor = 1.0;
+float GFactorMax = 0;
+float GFactorMin = 1.0;
+uint8_t GFactorDirty = 0;
+float AttitudePitch = 0;
+float AttitudeRoll = 0;
+float FilterMoltiplier = 3.0;
+uint16_t lv_atan2(int x, int y);
+// Define complementary filter constant (adjust as needed)
+float AttitudeBalanceAlpha = 0.98;
+#define DT 0.1 // Time step HZ
 
 uint8_t Device_addr ; // default for SD0/SA0 low, 0x6A if high
 acc_scale_t acc_scale = ACC_RANGE_4G;
@@ -57,10 +75,18 @@ void QMI8658_Init(void)
         case GYR_RANGE_512DPS: gyroScales = 512.0 / 32768.0; break;
         case GYR_RANGE_1024DPS: gyroScales = 1024.0 / 32768.0; break;
     }
+
+
+    GyroBias.x=0;
+    GyroBias.y=0;
+    GyroBias.z=0;
 }
 void QMI8658_Loop(void)
 {
   getAccelerometer();
+  getGyroscope();
+  getAttitude();
+  getGFactor();
 }
 
 /**
@@ -272,7 +298,65 @@ void getAccelerometer(void)
     Accel.y = Accel.y * accelScales;
     Accel.z = Accel.z * accelScales;
 
+    AccelFiltered.x = (FilterMoltiplier*AccelFiltered.x + Accel.x) / (FilterMoltiplier+1.0);
+    AccelFiltered.y = (FilterMoltiplier*AccelFiltered.y + Accel.y) / (FilterMoltiplier+1.0);
+    AccelFiltered.z = (FilterMoltiplier*AccelFiltered.z + Accel.z) / (FilterMoltiplier+1.0);
 }
+
+
+// Function to calculate roll (bank) from accelerometer
+uint16_t  getRollFromAccel(float axNotUsed, float ay, float az) {
+
+    int alpha = ay*10.0;
+    int beta = az*10.0;
+    if(alpha == 0 && beta == 0){
+        // Exception:
+        return 0;
+    }
+
+
+    return lv_atan2(alpha, beta);
+}
+
+// Function to calculate pitch from accelerometer
+int16_t  getPitchFromAccel(float ax, float ay, float az) {
+
+    lv_sqrt_res_t res;
+    lv_sqrt(ay*ay*100.0+ az*az*100.0, &res, 0x8000);
+
+
+    int alpha = -ax*10.0;
+    if(alpha == 0 && res.i == 0){
+        // Exception:
+        return 0;
+    }
+
+    uint16_t pitchReference=lv_atan2(alpha, res.i);
+    if(pitchReference>=90){
+        pitchReference = pitchReference -360;
+    }
+    return pitchReference;
+}
+
+// Complementary filter for roll and pitch estimation
+void updateAttitude(float ax, float ay, float az, float gx, float gy, float *roll, float *pitch) {
+    // Convert gyroscope readings from degrees per second to angle change
+    float gyroRoll = *roll + gx * DT;
+    float gyroPitch = *pitch + gy * DT;
+
+    // Compute accelerometer roll and pitch
+    float accelRoll = getRollFromAccel(ax, ay, az);
+    float accelPitch = getPitchFromAccel(ax, ay, az);
+
+    // Apply complementary filter
+    *roll = AttitudeBalanceAlpha * gyroRoll + (1.0 - AttitudeBalanceAlpha) * accelRoll;
+    *pitch = AttitudeBalanceAlpha * gyroPitch + (1.0 - AttitudeBalanceAlpha) * accelPitch;
+}
+
+
+
+
+//Guru Meditation Error: Core  0 panic'ed (IntegerDivideByZero). Exception was unhandled.
 void getGyroscope(void)
 {
     uint8_t buf[6];
@@ -283,21 +367,34 @@ void getGyroscope(void)
     Gyro.x = Gyro.x * gyroScales;
     Gyro.y = Gyro.y * gyroScales;
     Gyro.z = Gyro.z * gyroScales;
+
+    GyroFiltered.x = (FilterMoltiplier*GyroFiltered.x + Gyro.x) / (FilterMoltiplier+1.0);
+    GyroFiltered.y = (FilterMoltiplier*GyroFiltered.y + Gyro.y) / (FilterMoltiplier+1.0);
+    GyroFiltered.z = (FilterMoltiplier*GyroFiltered.z + Gyro.z) / (FilterMoltiplier+1.0);
+}
+void getGFactor(void)
+{
+    lv_sqrt_res_t res;
+    lv_sqrt(AccelFiltered.x*AccelFiltered.x*100.0+ AccelFiltered.y*AccelFiltered.y*100.0+ AccelFiltered.z*AccelFiltered.z*100.0, &res, 0x8000);
+    GFactor = res.i/10.0;
+    if(AccelFiltered.x<0){
+        GFactor = GFactor * -1.0;
+    }
+    if(GFactor>GFactorMax){
+        printf("GMeter new Max %f %f",GFactor,GFactorMax);
+        GFactorMax = GFactor;
+        AccelFilteredMax.x = AccelFiltered.x;
+        AccelFilteredMax.y = AccelFiltered.y;
+        GFactorDirty = 1;
+    }
+    if(GFactor<GFactorMin){
+        printf("GMeter new min %f %f",GFactor,GFactorMin);
+        GFactorMin = GFactor;
+        GFactorDirty = 1;
+    }
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+void getAttitude(void)
+{
+    updateAttitude(AccelFiltered.z, AccelFiltered.y, -AccelFiltered.x, GyroFiltered.z+GyroBias.z, -(GyroFiltered.y+GyroBias.y), &AttitudeRoll, &AttitudePitch);
+}

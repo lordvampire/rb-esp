@@ -11,7 +11,8 @@
 #include "SD_MMC.h"
 #include "LVGL_Driver.h"
 #include "LVGL_Example.h"
-#include "Wireless.h"
+#include "RB02.h"
+
 #include "BAT_Driver.h"
 
 void Driver_Loop(void *parameter)
@@ -44,15 +45,26 @@ void Driver_Init(void)
 }
 void app_main(void)
 {   
-    Wireless_Init();
+
+
+    // Initialize NVS.
+    esp_err_t ret = nvs_flash_init();
+    if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND)
+    {
+        ESP_ERROR_CHECK(nvs_flash_erase());
+        ret = nvs_flash_init();
+    }
+
+
+    //Wireless_Init();
     Driver_Init();
     LCD_Init();
     Touch_Init();
-    SD_Init();
+    //SD_Init();
     LVGL_Init();
 /********************* Demo *********************/
-    Lvgl_Example1();
-
+    //Lvgl_Example1();
+    RB02_Example1();
     // lv_demo_widgets();
     // lv_demo_keypad_encoder();
     // lv_demo_benchmark();
