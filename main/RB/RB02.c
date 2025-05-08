@@ -1,10 +1,22 @@
 /**
+ * Copyright (c) 2024 XIAPROJECTS SRL
+ * Distributable under the terms of The "BSD New" License
+ * that can be found in the LICENSE file, herein included
+ * as part of this header.
+ * This source is part of the project RB:
+ * 01 -> Display 2.8" with Synthetic vision, Autopilot and ADSB
+ * 02 -> Display 2.8" with SixPack
+ * 03 -> Autopilot, ADSB, Radio, Flight Computer
+ *
+ *
  * RB02.c
  * Implementation of RoastBeef PN 02 The basic six pack version
  *
  * Features:
+ * - GPS Speed -> Requires NMEA TTL RS232 GPS Reveiver such as ublox
  * - Attitude indicator
  * - Turn & Slip
+ * - GPS Gyro-Track -> Requires NMEA TTL RS232 GPS Reveiver such as ublox
  * - Altimeter
  * - Variometer
  * - Chronometer
@@ -30,6 +42,7 @@
 #include "RoundAltitude.c"
 #include "RoundTurnCoordinator.c"
 #include "RoundGyro.c"
+#include "RoundGyroHeading.c"
 #include "RoundVariometer.c"
 #include "turn_coordinator.c"
 #include "fi_tc_airplane.c"
@@ -56,6 +69,10 @@
 #include "att_tri.c"
 #include "DigitFont100x25.c"
 #include "DigitFont70x20.c"
+#include "arcRed.c"
+#include "arcYellow.c"
+#include "arcGreen.c"
+#include "arcWhite.c"
 
 // External dependencies
 #include "LVGL_Example.h"
@@ -74,6 +91,108 @@ extern float GFactorMax;
 extern float GFactorMin;
 extern uint8_t GFactorDirty;
 
+/* 1.0.9 For future compatibility imported NMEA ESP32 Example header */
+#define CONFIG_NMEA_PARSER_RING_BUFFER_SIZE 2048
+#define CONFIG_NMEA_PARSER_TASK_STACK_SIZE 4 * 1024
+#define CONFIG_NMEA_PARSER_TASK_PRIORITY 11
+#define CONFIG_NMEA_PARSER_UART_RXD 44
+#define CONFIG_NMEA_STATEMENT_RMC 1
+
+#define GPS_MAX_SATELLITES_IN_USE (12)
+#define GPS_MAX_SATELLITES_IN_VIEW (16)
+
+/**
+ * @brief Declare of NMEA Parser Event base
+ *
+ */
+ESP_EVENT_DECLARE_BASE(ESP_NMEA_EVENT);
+
+/**
+ * @brief GPS fix type
+ *
+ */
+typedef enum
+{
+  GPS_FIX_INVALID, /*!< Not fixed */
+  GPS_FIX_GPS,     /*!< GPS */
+  GPS_FIX_DGPS,    /*!< Differential GPS */
+} gps_fix_t;
+
+/**
+ * @brief GPS fix mode
+ *
+ */
+typedef enum
+{
+  GPS_MODE_INVALID = 1, /*!< Not fixed */
+  GPS_MODE_2D,          /*!< 2D GPS */
+  GPS_MODE_3D           /*!< 3D GPS */
+} gps_fix_mode_t;
+
+/**
+ * @brief GPS satellite information
+ *
+ */
+typedef struct
+{
+  uint8_t num;       /*!< Satellite number */
+  uint8_t elevation; /*!< Satellite elevation */
+  uint16_t azimuth;  /*!< Satellite azimuth */
+  uint8_t snr;       /*!< Satellite signal noise ratio */
+} gps_satellite_t;
+
+/**
+ * @brief GPS time
+ *
+ */
+typedef struct
+{
+  uint8_t hour;      /*!< Hour */
+  uint8_t minute;    /*!< Minute */
+  uint8_t second;    /*!< Second */
+  uint16_t thousand; /*!< Thousand */
+} gps_time_t;
+
+/**
+ * @brief GPS date
+ *
+ */
+typedef struct
+{
+  uint8_t day;   /*!< Day (start from 1) */
+  uint8_t month; /*!< Month (start from 1) */
+  uint16_t year; /*!< Year (start from 2000) */
+} gps_date_t;
+
+/**
+ * @brief GPS object
+ *
+ */
+typedef struct
+{
+  float latitude;                                                /*!< Latitude (degrees) */
+  float longitude;                                               /*!< Longitude (degrees) */
+  float altitude;                                                /*!< Altitude (meters) */
+  gps_fix_t fix;                                                 /*!< Fix status */
+  uint8_t sats_in_use;                                           /*!< Number of satellites in use */
+  gps_time_t tim;                                                /*!< time in UTC */
+  gps_fix_mode_t fix_mode;                                       /*!< Fix mode */
+  uint8_t sats_id_in_use[GPS_MAX_SATELLITES_IN_USE];             /*!< ID list of satellite in use */
+  float dop_h;                                                   /*!< Horizontal dilution of precision */
+  float dop_p;                                                   /*!< Position dilution of precision  */
+  float dop_v;                                                   /*!< Vertical dilution of precision  */
+  uint8_t sats_in_view;                                          /*!< Number of satellites in view */
+  gps_satellite_t sats_desc_in_view[GPS_MAX_SATELLITES_IN_VIEW]; /*!< Information of satellites in view */
+  gps_date_t date;                                               /*!< Fix date */
+  bool valid;                                                    /*!< GPS validity */
+  float speed;                                                   /*!< Ground speed, unit: m/s */
+  float cog;                                                     /*!< Course over ground */
+  float variation;                                               /*!< Magnetic variation */
+} gps_t;
+
+gps_t NMEA_DATA;
+int32_t GpsSpeed0ForDisable = 0;
+
 // DEFINES
 #define RB02_TOUCH_SECTION 3
 #define RB02_TOUCH_SECTION_SIZE 160
@@ -86,6 +205,10 @@ extern uint8_t GFactorDirty;
 #define BMP280_U32_t uint32_t
 #define BMP280_S32_t int32_t
 
+static const int RX_BUF_SIZE = 1024;
+#define TXD_PIN (GPIO_NUM_43)
+#define RXD_PIN (GPIO_NUM_44)
+#define UART_N UART_NUM_1
 // Prototype declaration
 static lv_obj_t *Onboard_create_Base(lv_obj_t *parent, const lv_img_dsc_t *backgroundImage);
 static void Onboard_create_Speed(lv_obj_t *parent);
@@ -100,11 +223,15 @@ static void Onboard_create_Variometer(lv_obj_t *parent);
 static void Onboard_create_GMeter(lv_obj_t *parent);
 static void Onboard_create_Setup(lv_obj_t *parent);
 static void speedBgClicked(lv_event_t *event);
+
 void rb_increase_lvgl_tick(lv_timer_t *t);
 void update_GMeter_lvgl_tick(lv_timer_t *t);
 void update_Clock_lvgl_tick(lv_timer_t *t);
 void update_AltimeterDigital_lvgl_tick(lv_timer_t *t);
 void update_Altimeter_lvgl_tick(lv_timer_t *t);
+void uart_fetch_data();
+void nvsStorePCal();
+void nvsStoreUARTBaudrate();
 
 static void CreateDigitArray(lv_obj_t *parent, lv_img_dsc_t *font, int howMany, int dx, int dy);
 static void CreateSingleDigit(lv_obj_t *parent, lv_img_dsc_t *font, lv_obj_t **segments, int dx, int dy);
@@ -129,11 +256,13 @@ typedef enum
 
 typedef enum
 {
+#ifdef ENABLE_DEMO_SCREENS
   RB02_TAB_SYS,
   RB02_TAB_SYN,
   RB02_TAB_RDR,
   // RB02_TAB_HSI,
   RB02_TAB_MAP,
+#endif
   RB02_TAB_SPD,
   RB02_TAB_ATT,
   RB02_TAB_ALT,
@@ -147,10 +276,13 @@ typedef enum
   RB02_TAB_DEV
 } tabs;
 
+lv_obj_t *uartDropDown = NULL;
 lv_obj_t *SettingStatus0 = NULL;
 lv_obj_t *SettingStatus1 = NULL;
 lv_obj_t *SettingStatus2 = NULL;
 lv_obj_t *SettingStatus3 = NULL;
+lv_obj_t *SettingStatus4UART = NULL;
+
 lv_obj_t *SettingLabelFilter = NULL;
 
 lv_obj_t *SettingAttitudeCompensation = NULL;
@@ -160,17 +292,19 @@ lv_obj_t *Screen_Attitude_Pitch = NULL;
 lv_obj_t *Screen_Attitude_RollIndicator = NULL;
 void *Screen_Attitude_Rounds[4];
 uint16_t QNH = 1013;
+lv_obj_t *Screen_Gyro_Gear = NULL;
 lv_obj_t *Screen_Altitude_Miles = NULL;
 lv_obj_t *Screen_Altitude_Cents = NULL;
 lv_obj_t *Screen_Variometer_Cents = NULL;
 lv_obj_t *Screen_Altitude_QNH = NULL;
 lv_obj_t *Screen_Altitude_QNH2 = NULL;
 lv_obj_t *Screen_Altitude_Variometer2 = NULL;
+lv_obj_t *Screen_Altitude_Pressure = NULL;
 int lastAttitudePitch = 0;
 int lastAttitudeRoll = 0;
 datetime_t stopwatch = {0};
 uint8_t DeviceIsDemoMode = 0;
-tabs StartupPage = RB02_TAB_SYS;
+tabs StartupPage = 0;
 lv_obj_t *Loading_slider = NULL;
 lv_timer_t *auto_step_timer = NULL;
 lv_obj_t *tv = NULL;
@@ -188,6 +322,9 @@ datetime_t datetimeTimer3 = {0};
 lv_res_t Screen_TurnSlip_Obj_Ball_Size = SCREEN_HEIGHT / 12;
 lv_obj_t *Screen_TurnSlip_Obj_Ball = NULL;
 lv_obj_t *Screen_TurnSlip_Obj_Turn = NULL;
+lv_obj_t *Screen_Speed_SpeedText = NULL;
+lv_obj_t *Screen_Speed_SpeedTick = NULL;
+lv_obj_t *Screen_Track_TrackText = NULL;
 lv_obj_t *Screen_GMeter_Ball = NULL;
 lv_obj_t *Screen_GMeter_BallMax = NULL;
 lv_obj_t *GMeterLabel = NULL;
@@ -195,7 +332,10 @@ lv_obj_t *GMeterLabelMax = NULL;
 float GMeterScale = 3.0;
 IMUdata GyroBiasAcquire[3];
 lv_obj_t *mbox1 = NULL;
-
+uint16_t degreeStart = 0;
+uint16_t degreeEnd = 320;
+uint8_t speedKtStart = 0;
+uint8_t speedKtEnd = 200;
 uint8_t workflow = 0;
 int32_t bmp280override = 0;
 int32_t bmp280Calibration[12];
@@ -242,11 +382,10 @@ void RB02_Example1(void)
   LV_LOG_WARN("LV_FONT_MONTSERRAT_14 is not enabled for the widgets demo. Using LV_FONT_DEFAULT instead.");
 #endif
 
-ApplyCoding();
-nvsRestoreGMeter();
+  ApplyCoding();
+  nvsRestoreGMeter();
   LCD_Backlight = 0;
-  LVGL_Backlight_adjustment(LCD_Backlight);    
-
+  LVGL_Backlight_adjustment(LCD_Backlight);
 
   lv_style_init(&style_title);
   // lv_style_set_text_font(&style_title, font_large);
@@ -256,11 +395,13 @@ nvsRestoreGMeter();
   lv_obj_set_style_text_font(lv_scr_act(), font_normal, 0);
   lv_obj_set_style_bg_color(tv, lv_color_black(), LV_STATE_DEFAULT);
 
+#ifdef ENABLE_DEMO_SCREENS
   lv_obj_t *tu = lv_tabview_add_tab(tv, "SynthSide");
   lv_obj_t *tz = lv_tabview_add_tab(tv, "SynthBack");
   lv_obj_t *tw = lv_tabview_add_tab(tv, "Radar");
   // lv_obj_t *ty = lv_tabview_add_tab(tv, "HSI");
   lv_obj_t *t0 = lv_tabview_add_tab(tv, "Map");
+#endif
   lv_obj_t *t1 = lv_tabview_add_tab(tv, "Speed");
   lv_obj_t *t2 = lv_tabview_add_tab(tv, "Attitude");
   lv_obj_t *t3 = lv_tabview_add_tab(tv, "Altimeter");
@@ -271,8 +412,8 @@ nvsRestoreGMeter();
   lv_obj_t *t7 = lv_tabview_add_tab(tv, "GMeter");
   lv_obj_t *t8 = lv_tabview_add_tab(tv, "Clock");
   lv_obj_t *t9 = lv_tabview_add_tab(tv, "Setup");
-  //lv_obj_t *t10 = lv_tabview_add_tab(tv, "Demo");
-
+  // lv_obj_t *t10 = lv_tabview_add_tab(tv, "Demo");
+#ifdef ENABLE_DEMO_SCREENS
   Onboard_create_Base(tu, &RoundSynthViewSide);
   lv_obj_add_event_cb(tu, speedBgClicked, LV_EVENT_CLICKED, NULL);
   Onboard_create_Base(tz, &RoundSynthViewAttitude);
@@ -282,6 +423,7 @@ nvsRestoreGMeter();
   // Onboard_create_Base(ty, &RoundHSI);
   Onboard_create_Base(t0, &RoundMapWithControlledSpaces);
   lv_obj_add_event_cb(t0, speedBgClicked, LV_EVENT_CLICKED, NULL);
+#endif
 
   Onboard_create_Speed(t1);
   Onboard_create_Attitude(t2);
@@ -293,7 +435,7 @@ nvsRestoreGMeter();
   Onboard_create_GMeter(t7);
   Onboard_create_Clock(t8);
   Onboard_create_Setup(t9);
-  //Onboard_create(t10);
+  // Onboard_create(t10);
 
   // BMP280
   uint8_t bmp280BufferReset[1] = {0xB6};
@@ -322,6 +464,238 @@ nvsRestoreGMeter();
     lv_tabview_set_act(tv, StartupPage, LV_ANIM_OFF);
   }
 }
+
+void nmea_RMC_UpdatedValueFor(uint8_t csvCounter, int32_t finalNumber, uint8_t decimalCounter)
+{
+  float conversionValue = finalNumber;
+  for (uint8_t c = 0; c < decimalCounter; c++)
+  {
+    conversionValue = conversionValue / 10.0;
+  }
+
+  /*
+  0=-12.00
+  0=-97.00
+  0=-938.00
+  0=-9346.00
+  0=-93431.00
+  0=-934291.00
+  1=-9342910.00
+  1=-93429088.00
+  1=-934290880.00
+  1=-752974528.00
+  1=1060189632.00
+  1=2011961600.00
+  1=-135522112.00
+  1=-6673091.00
+  2=19168436.00
+  3=19885676.00
+  3=-15891594.00
+  3=12882754.00
+  3=-21477.37
+  3=-21477.37
+  3=-21477.37
+  3=21472.30
+  3=-2.53
+  3=-2.53
+  4=-25.32
+  5=176.26
+  5=44.63
+  5=16.77
+  5=167.68
+  5=-41.18
+  5=1.77
+  5=1.77
+  5=0.05
+  5=0.01
+  5=-0.00
+  6=0.00
+  7=0.00
+  7=-0.00
+  7=0.00
+  7=0.00
+  9=0.00
+  9=-0.00
+  9=-0.00
+  9=-0.00
+  9=0.00
+  9=0.00
+  12=0.00
+  12=-0.00
+  12=0.00
+  12=-0.00
+  0=-12.00
+  0=-97.00
+  0=-938.00
+  0=-9346.00
+  0=-93431.00
+  0=-934291.00
+  1=-9342910.00
+  1=-93429088.00
+  1=-934290880.00
+  1=-752974528.00
+  1=1060189632.00
+  1=2011961600.00
+  1=-135522112.00
+  1=-6673090.50
+  2=19168438.00
+  3=19885698.00
+  3=-15891394.00
+  3=12884754.00
+  3=-1477.37
+  3=-1477.37
+  3=-1477.37
+  3=-1477.37
+  3=-1477.37
+  3=-188.88
+  4=-170.80
+  5=9.99
+  5=99.92
+  5=140.17
+  5=113.26
+  5=-155.91
+  5=15.88
+  5=-1.30
+  5=-0.01
+  5=-0.01
+  5=0.00
+  6=-0.00
+  7=0.00
+  7=-0.00
+  7=0.00
+  7=0.00
+  9=-0.00
+  9=0.00
+
+  */
+
+  switch (csvCounter)
+  {
+  case 0: // $GPRMC
+    /* code */
+    break;
+  case 1: // UTC hhmmss.ss
+    NMEA_DATA.tim.thousand = finalNumber % 100;
+    NMEA_DATA.tim.second = (finalNumber / 100) % 60;
+    NMEA_DATA.tim.minute = (finalNumber / 10000) % 60;
+    NMEA_DATA.tim.hour = (finalNumber / 1000000);
+    /* code */
+    break;
+  case 2: // A
+    /* code */
+    break;
+  case 3: // 4311.11936
+    /* code */
+    break;
+  case 4: // N
+    /* code */
+    break;
+  case 5: // 01208.18660
+    /* code */
+    break;
+  case 6: // E
+    /* code */
+    break;
+  case 7: // Speed KT
+
+    NMEA_DATA.speed = conversionValue * 1.852;
+    /* code */
+    break;
+  case 8: // Track
+    /* code */
+
+    NMEA_DATA.cog = conversionValue;
+    break;
+  case 9: // Date ddmmyy
+    /* code */
+    break;
+  }
+}
+
+bool nmea_RMC_mini_parser(const uint8_t *sentence, uint16_t length)
+{
+
+  int8_t csvCounter = 0;
+  int8_t decimalCounter = 0;
+  int8_t decimalEnabled = 0;
+
+  int32_t finalNumber = 0;
+
+  for (uint8_t x = 0; x < length; x++)
+  {
+    if (sentence[x] == 0)
+      break;
+    if (sentence[x] == ',')
+    {
+      // printf("%d=%ld/%d\n", csvCounter, finalNumber,decimalCounter);
+      nmea_RMC_UpdatedValueFor(csvCounter, finalNumber, decimalCounter);
+      decimalCounter = 0;
+      csvCounter++;
+      decimalEnabled = 0;
+      finalNumber = 0;
+      continue;
+    }
+    if (sentence[x] == '\n')
+      break;
+    if (sentence[x] == '\r')
+      break;
+    if (sentence[x] == '.')
+    {
+      decimalEnabled = 1;
+      continue;
+    }
+    if (sentence[x] == '-')
+    {
+      finalNumber = finalNumber - 1;
+    }
+    else
+    {
+      decimalCounter += decimalEnabled;
+      finalNumber = 10 * finalNumber + (sentence[x] - '0');
+    }
+  }
+
+  return true;
+}
+
+void uart_fetch_data()
+{
+  if (GpsSpeed0ForDisable == 0)
+    return;
+  uint8_t *data = (uint8_t *)malloc(RX_BUF_SIZE + 1);
+  const int rxBytes = uart_read_bytes(UART_N, data, RX_BUF_SIZE, 10 / portTICK_PERIOD_MS);
+  if (rxBytes > 0)
+  {
+    data[rxBytes] = 0;
+    /*
+    printf("UART[%d]=", rxBytes);
+    data[rxBytes] = 0;
+    for (int x = 0; x < rxBytes; x++)
+    {
+      printf("%c", data[x]);
+    }
+    printf("\n");
+    */
+    for (int x = 0; x < rxBytes - 23; x++)
+    {
+      //$GPRMC,,,,,,,,,,,,A*79
+      if (data[x] == '$')
+      {
+        if (strncmp((char *)(data + x + 1), "GPRMC,", 5) == 0)
+        {
+          lv_label_set_text(SettingStatus4UART, "DATA RECEIVED");
+          if (nmea_RMC_mini_parser(data + x, rxBytes - x))
+          {
+            break;
+          }
+          break; // Fast as possibile we go back and do not parse anymore
+        }
+      }
+    }
+  }
+  free(data);
+}
+
 void nvsRestoreGMeter()
 {
   //
@@ -366,6 +740,22 @@ void nvsRestoreGMeter()
       printf("Error (%s) reading!\n", esp_err_to_name(err));
     }
 
+    int32_t pcal = 0; // value will default to 0, if not set yet in NVS
+    err = nvs_get_i32(my_handle, "pcal", &pcal);
+    switch (err)
+    {
+    case ESP_OK:
+      printf("pcal = %ld\n", pcal);
+      break;
+    case ESP_ERR_NVS_NOT_FOUND:
+      printf("The value is not initialized yet!\n");
+      break;
+    default:
+      printf("Error (%s) reading!\n", esp_err_to_name(err));
+    }
+
+    bmp280override = pcal;
+
     uint8_t defaultPageOrDemo = 0xff; // value will default to 0, if not set yet in NVS
     err = nvs_get_u8(my_handle, "default", &defaultPageOrDemo);
     switch (err)
@@ -380,7 +770,8 @@ void nvsRestoreGMeter()
       printf("Error (%s) reading!\n", esp_err_to_name(err));
     }
 
-    if(defaultPageOrDemo==0xff){
+    if (defaultPageOrDemo == 0xff)
+    {
       DeviceIsDemoMode = 1;
     }
     else
@@ -389,8 +780,58 @@ void nvsRestoreGMeter()
       StartupPage = defaultPageOrDemo;
     }
 
+    err = nvs_get_i32(my_handle, "uart", &GpsSpeed0ForDisable);
+    switch (err)
+    {
+    case ESP_OK:
+      printf("GpsSpeed0ForDisable = %ld\n", GpsSpeed0ForDisable);
+      break;
+    case ESP_ERR_NVS_NOT_FOUND:
+      printf("The value is not initialized yet!\n");
+      break;
+    default:
+      printf("Error (%s) reading!\n", esp_err_to_name(err));
+    }
 
     GFactorDirty = 0;
+    nvs_close(my_handle);
+  }
+}
+
+void nvsStoreUARTBaudrate()
+{
+  //
+  nvs_handle_t my_handle;
+  esp_err_t err = nvs_open("storage", NVS_READWRITE, &my_handle);
+  if (err != ESP_OK)
+  {
+    printf("Error (%s) opening NVS handle!\n", esp_err_to_name(err));
+  }
+  else
+  {
+    // Read
+    printf("Writing UART from NVS ... ");
+    err = nvs_set_i32(my_handle, "uart", GpsSpeed0ForDisable);
+    printf((err != ESP_OK) ? "Failed to update GpsSpeed0ForDisable!\n" : "Done\n");
+    nvs_close(my_handle);
+  }
+}
+
+void nvsStorePCal()
+{
+  //
+  nvs_handle_t my_handle;
+  esp_err_t err = nvs_open("storage", NVS_READWRITE, &my_handle);
+  if (err != ESP_OK)
+  {
+    printf("Error (%s) opening NVS handle!\n", esp_err_to_name(err));
+  }
+  else
+  {
+    // Read
+    printf("Writing pcal from NVS ... ");
+    err = nvs_set_i32(my_handle, "pcal", bmp280override);
+    printf((err != ESP_OK) ? "Failed to update bmp280override!\n" : "Done\n");
     nvs_close(my_handle);
   }
 }
@@ -432,12 +873,14 @@ void nvsStoreDefaultScreenOrDemo()
     printf("Writing Default Screen from NVS ... ");
     uint8_t value = 0xff;
 
-if(DeviceIsDemoMode == 1){
-
-} else {
-  lv_tabview_t *tabview = (lv_tabview_t *)tv;
-  value = (uint8_t)tabview->tab_cur;
-}
+    if (DeviceIsDemoMode == 1)
+    {
+    }
+    else
+    {
+      lv_tabview_t *tabview = (lv_tabview_t *)tv;
+      value = (uint8_t)tabview->tab_cur;
+    }
 
     err = nvs_set_u8(my_handle, "default", value);
     printf((err != ESP_OK) ? "Failed to update default!\n" : "Done\n");
@@ -465,7 +908,7 @@ void update_Attitude_lvgl_tick(lv_timer_t *t)
   lastAttitudePitch = moveY;
   lastAttitudeRoll = -AttitudeRoll;
 
-  lv_obj_set_pos(Screen_Attitude_Pitch, 0, -lastAttitudePitch + att_aircraft.header.h/2);
+  lv_obj_set_pos(Screen_Attitude_Pitch, 0, -lastAttitudePitch + att_aircraft.header.h / 2);
 
   for (int a = 0; a < 4; a++)
   {
@@ -629,9 +1072,12 @@ void example1_BMP280_lvgl_tick(lv_timer_t *t)
   temperatureCompensation(adc_t);
   pressureCompensation(adc_p);
 
-  int32_t AltimeterNew = (((QNH * 100) - bmp280Pressure) * 33) / 100;
-  // 0.1 Feet/second
-  Variometer = AltimeterNew - Altimeter;
+  // Altimeter is *100 feet
+  int32_t AltimeterNew = (((QNH * 100) - bmp280Pressure) * 27.5);
+  // Polling is 1Hz = 0.01 Feet/Second
+  int32_t VariometerInstant = AltimeterNew - Altimeter;
+  // 1.0.9 Variometer is filterd
+  Variometer = (Variometer + VariometerInstant) / 2;
   Altimeter = AltimeterNew;
 
   printf("BMP280 ");
@@ -653,26 +1099,86 @@ void example1_BMP280_lvgl_tick(lv_timer_t *t)
          adc_t, adc_p, ((Variometer * 6) * 36 / 400),
          Gyro.x,
          Gyro.y,
-         Gyro.z
-        );
+         Gyro.z);
+}
+void Get_BMP280(void)
+{
+  example1_BMP280_lvgl_tick(NULL);
+}
+void update_Track_lvgl_tick(lv_timer_t *t)
+{
+  static int32_t lastCOG = 0;
+  int32_t COG = -NMEA_DATA.cog * 10;
+  if (COG != lastCOG)
+  {
+    printf("NMEA: Track %ld-->%ld\n", lastCOG, COG);
+    lastCOG = COG;
+    lv_img_set_angle(Screen_Gyro_Gear, COG);
+
+    char buf[15];
+    snprintf(buf, sizeof(buf), "%.0f°", NMEA_DATA.cog);
+    lv_label_set_text(Screen_Track_TrackText, buf);
+  }
+}
+
+void update_Speed_lvgl_tick(lv_timer_t *t)
+{
+  static int lastSpeed = -1;
+  int speed = NMEA_DATA.speed * 10;
+  if (speed != lastSpeed)
+  {
+    // printf("NMEA: Speed %d-->%d m/s Angle: %ld\n", lastSpeed, speed, (int32_t)(speed));
+    lastSpeed = speed;
+    int32_t speedAngle = (speed);
+    // Range 0kmh->360kmh
+
+    lv_img_set_angle(Screen_Speed_SpeedTick, degreeStart + speedAngle + 900);
+
+    char buf[15];
+    snprintf(buf, sizeof(buf), "%.0f", NMEA_DATA.speed / 1.852); // KT
+    lv_label_set_text(Screen_Speed_SpeedText, buf);
+  }
 }
 
 void update_Variometer_lvgl_tick(lv_timer_t *t)
 {
-  // Variometer => feet/5 seconds => *60/5 => feet/min
+  // 1.0.9 Variometer is *100 and 1Hz
+  // Variometer => 0.01 Feet/Second => *60/100 => Feet/min
   // UI 90° => 1000ft/min => 180° = 2000ft/min => 360° = 4000ft/min
-  //
-  int32_t VDegree = ((Variometer * 60 / 5) * 36 / 400);
+  // LVGL is *10 Degree;
+  int32_t VDegree = ((Variometer * 6.0 / 10.0) * 36.0 / 40);
   lv_img_set_angle(Screen_Variometer_Cents, VDegree);
 }
 
 void update_Altimeter_lvgl_tick(lv_timer_t *t)
 {
-  // Altimeter
-  float milesDegree = (36.0 * Altimeter) / 100.0;
-  float centsDegree = (360.0 * ((Altimeter) % 1000)) / 100.0;
+  // Altimeter Analog Screen
+  // 1.0.9 Altimter is *100 Feet
+  int32_t AltimeterInFeet = Altimeter / 100.0;
+  float milesDegree = (36.0 * AltimeterInFeet) / 100.0;
+  float centsDegree = (360.0 * ((AltimeterInFeet) % 1000)) / 100.0;
   lv_img_set_angle(Screen_Altitude_Miles, milesDegree + 900);
   lv_img_set_angle(Screen_Altitude_Cents, centsDegree + 900);
+}
+
+void uartApplyRates()
+{
+  lv_label_set_text(SettingStatus4UART, "NO DATA RECEIVED");
+
+  if (GpsSpeed0ForDisable > 0)
+  {
+    // 1.0.9 Enable UART for NMEA GPS Input
+    const uart_config_t uart_config = {
+        .baud_rate = GpsSpeed0ForDisable, // TODO: Delay the setup up to the LVGL started
+        .data_bits = UART_DATA_8_BITS,
+        .parity = UART_PARITY_DISABLE,
+        .stop_bits = UART_STOP_BITS_1,
+        .flow_ctrl = UART_HW_FLOWCTRL_DISABLE,
+        .source_clk = UART_SCLK_APB,
+    };
+    // Setup Baud Rate
+    uart_param_config(1, &uart_config);
+  }
 }
 
 void bmp280Setup()
@@ -713,7 +1219,6 @@ void rb_increase_lvgl_tick(lv_timer_t *t)
     if (stepDown < 1)
     {
       stepDown = 50;
-      example1_BMP280_lvgl_tick(t);
 
       if (GFactorDirty != 0 && DeviceIsDemoMode == 0)
       {
@@ -746,19 +1251,43 @@ void rb_increase_lvgl_tick(lv_timer_t *t)
     case 7:
       readCalibration();
       LCD_Backlight = 1;
-      LVGL_Backlight_adjustment(LCD_Backlight);    
+      LVGL_Backlight_adjustment(LCD_Backlight);
       break;
-      case 8:
+    case 8:
       GyroBiasAcquire[0] = GyroFiltered;
-      case 50:
+    case 50:
       GyroBiasAcquire[1] = GyroFiltered;
-      case 80:
+    case 80:
       GyroBiasAcquire[2] = GyroFiltered;
-      GyroBias.x = -(GyroBiasAcquire[0].x+GyroBiasAcquire[1].x+GyroBiasAcquire[2].x)/3.0;
-      GyroBias.y = -(GyroBiasAcquire[0].y+GyroBiasAcquire[1].y+GyroBiasAcquire[2].y)/3.0;
-      GyroBias.z = -(GyroBiasAcquire[0].z+GyroBiasAcquire[1].z+GyroBiasAcquire[2].z)/3.0;
+      GyroBias.x = -(GyroBiasAcquire[0].x + GyroBiasAcquire[1].x + GyroBiasAcquire[2].x) / 3.0;
+      GyroBias.y = -(GyroBiasAcquire[0].y + GyroBiasAcquire[1].y + GyroBiasAcquire[2].y) / 3.0;
+      GyroBias.z = -(GyroBiasAcquire[0].z + GyroBiasAcquire[1].z + GyroBiasAcquire[2].z) / 3.0;
     case 90:
       stopwatch = datetime;
+      break;
+    case 91:
+      uartApplyRates();
+      switch (GpsSpeed0ForDisable)
+      {
+      case 0:
+        lv_dropdown_set_selected(uartDropDown, 0);
+        break;
+      case 4800:
+        lv_dropdown_set_selected(uartDropDown, 1);
+        break;
+      case 9600:
+        lv_dropdown_set_selected(uartDropDown, 2);
+        break;
+      case 19200:
+        lv_dropdown_set_selected(uartDropDown, 3);
+        break;
+      case 38400:
+        lv_dropdown_set_selected(uartDropDown, 4);
+        break;
+      case 115200:
+        lv_dropdown_set_selected(uartDropDown, 5);
+        break;
+      }
       break;
     case 100:
 
@@ -769,7 +1298,7 @@ void rb_increase_lvgl_tick(lv_timer_t *t)
       lv_obj_add_flag(Loading_slider, LV_OBJ_FLAG_HIDDEN);
 
       LCD_Backlight = 100;
-      LVGL_Backlight_adjustment(LCD_Backlight);    
+      LVGL_Backlight_adjustment(LCD_Backlight);
       break;
     default:
       break;
@@ -791,6 +1320,14 @@ void rb_increase_lvgl_tick(lv_timer_t *t)
 
   switch (((lv_tabview_t *)tv)->tab_cur)
   {
+  case RB02_TAB_SPD:
+    uart_fetch_data();
+    update_Speed_lvgl_tick(t);
+    break;
+  case RB02_TAB_TRK:
+    uart_fetch_data();
+    update_Track_lvgl_tick(t);
+    break;
   case RB02_TAB_DEV:
     break;
   case RB02_TAB_VAR:
@@ -830,24 +1367,25 @@ void rb_increase_lvgl_tick(lv_timer_t *t)
             AccelFiltered.x,
             AccelFiltered.y,
             AccelFiltered.z,
-            GyroFiltered.x+GyroBias.x,
-            GyroFiltered.y+GyroBias.y,
-            GyroFiltered.z+GyroBias.z);
+            GyroFiltered.x + GyroBias.x,
+            GyroFiltered.y + GyroBias.y,
+            GyroFiltered.z + GyroBias.z);
     lv_label_set_text(SettingStatus1, buf);
 
     sprintf(buf, "%2.1f %2.1f %2.1f %2.1f %2.1f",
-      AttitudeRoll,
-      AttitudePitch,
-      GyroBias.x,
-      GyroBias.y,
-      GyroBias.z);
-lv_label_set_text(SettingStatus2, buf);
-
+            AttitudeRoll,
+            AttitudePitch,
+            GyroBias.x,
+            GyroBias.y,
+            GyroBias.z);
+    lv_label_set_text(SettingStatus2, buf);
 
     sprintf(buf, "%.1f°C %.2fhPa",
             bmp280Temperature / 100.0,
-            bmp280Pressure/ 100.0);
+            bmp280Pressure / 100.0);
     lv_label_set_text(SettingStatus3, buf);
+
+    uart_fetch_data();
   }
   break;
   }
@@ -875,13 +1413,14 @@ static void mbox1_event_cb(lv_event_t *e)
 
   lv_event_code_t code = lv_event_get_code(e);
   lv_obj_t *msgbox = lv_event_get_current_target(e);
-  
+
   if (code == LV_EVENT_VALUE_CHANGED)
   {
     const char *txt = lv_msgbox_get_active_btn_text(msgbox);
     if (txt)
     {
-      if(strcmp("RESET",txt)==0){
+      if (strcmp("RESET", txt) == 0)
+      {
         GFactorMax = 0;
         GFactorMin = 1.0;
         GFactorDirty = 1;
@@ -908,8 +1447,11 @@ static void mbox1_cage_event_cb(lv_event_t *e)
     const char *txt = lv_msgbox_get_active_btn_text(msgbox);
     if (txt)
     {
-      if(strcmp("CAGE",txt)==0){
-        GyroBias = GyroFiltered;
+      if (strcmp("CAGE", txt) == 0)
+      {
+        GyroBias.x = -GyroFiltered.x;
+        GyroBias.y = -GyroFiltered.y;
+        GyroBias.z = -GyroFiltered.z;
       }
       lv_msgbox_close(msgbox);
     }
@@ -932,9 +1474,7 @@ void lv_att_reset_msgbox(void)
   lv_obj_set_style_text_font(mbox1, &lv_font_montserrat_16, 0);
   lv_obj_add_event_cb(mbox1, mbox1_cage_event_cb, LV_EVENT_ALL, mbox1);
   lv_obj_center(mbox1);
- 
 }
-
 
 void lv_gmeter_reset_msgbox(void)
 {
@@ -973,9 +1513,8 @@ static void actionInTab(touchLocation location)
     lv_label_set_text(Screen_Altitude_QNH2, buf);
     snprintf(buf, sizeof(buf), "%+ld", Variometer);
     lv_label_set_text(Screen_Altitude_Variometer2, buf);
-  
-    example1_BMP280_lvgl_tick(NULL);
 
+    example1_BMP280_lvgl_tick(NULL);
 
     break;
 
@@ -1031,11 +1570,11 @@ static void actionInTab(touchLocation location)
     }
     break;
 
-    case RB02_TAB_ATT:
+  case RB02_TAB_ATT:
     switch (location)
     {
     case RB02_TOUCH_CENTER:
-        lv_att_reset_msgbox();
+      lv_att_reset_msgbox();
       break;
     default:
       break;
@@ -1044,13 +1583,12 @@ static void actionInTab(touchLocation location)
   default:
     break;
   }
-
-
 }
 
 static void speedBgClicked(lv_event_t *event)
 {
-  if(mbox1!=NULL){
+  if (mbox1 != NULL)
+  {
     return;
   }
 
@@ -1066,12 +1604,12 @@ static void speedBgClicked(lv_event_t *event)
     if (cur > 0)
     {
       cur--;
-      changedTab=true;
+      changedTab = true;
     }
     break;
   case RB02_TOUCH_E:
     cur++;
-      changedTab=true;
+    changedTab = true;
     break;
   default:
     actionInTab(location);
@@ -1084,7 +1622,8 @@ static void speedBgClicked(lv_event_t *event)
     cur = tabview->tab_cnt - 2;
   }
   lv_tabview_set_act(tv, cur, LV_ANIM_ON);
-  if(DeviceIsDemoMode == 0 && changedTab){
+  if (DeviceIsDemoMode == 0 && changedTab)
+  {
     nvsStoreDefaultScreenOrDemo();
   }
 }
@@ -1138,6 +1677,9 @@ static void AltimeterOverrideChanged(lv_event_t *e)
   char buf[50];
   sprintf(buf, "Altimeter QNH: %d mmHg %ld feet (%ld)", QNH, Altimeter, bmp280override);
   lv_label_set_text(bmp280overrideLabel, buf);
+
+  // Store
+  nvsStorePCal();
 }
 
 static void DisableFilteringChanged(lv_event_t *e)
@@ -1164,6 +1706,34 @@ static void GMeterMaxChanged(lv_event_t *e)
   GMeterScale = value;
 }
 
+static void event_handler_gps_menu(lv_event_t *e)
+{
+  lv_event_code_t code = lv_event_get_code(e);
+  lv_obj_t *obj = lv_event_get_target(e);
+  if (code == LV_EVENT_VALUE_CHANGED)
+  {
+    char buf[32];
+    lv_dropdown_get_selected_str(obj, buf, sizeof(buf));
+    LV_LOG_USER("Option: %s", buf);
+
+    GpsSpeed0ForDisable = 0;
+    if (strcmp(buf, "4800") == 0)
+      GpsSpeed0ForDisable = 4800;
+    if (strcmp(buf, "9600") == 0)
+      GpsSpeed0ForDisable = 9600;
+    if (strcmp(buf, "19200") == 0)
+      GpsSpeed0ForDisable = 19200;
+    if (strcmp(buf, "38400") == 0)
+      GpsSpeed0ForDisable = 38400;
+    if (strcmp(buf, "115200") == 0)
+      GpsSpeed0ForDisable = 115200;
+
+    uartApplyRates();
+
+    nvsStoreUARTBaudrate();
+  }
+}
+
 static void Onboard_create_Setup(lv_obj_t *parent)
 {
   int lineY = -200;
@@ -1187,7 +1757,7 @@ static void Onboard_create_Setup(lv_obj_t *parent)
     lv_obj_align(VersionLabel, LV_ALIGN_CENTER, 0, lineY);
     lv_obj_set_style_text_align(VersionLabel, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_set_style_text_font(VersionLabel, &lv_font_montserrat_16, 0);
-    lv_label_set_text(VersionLabel, "Version 1.0.6");
+    lv_label_set_text(VersionLabel, "Version 1.1.0B");
     lv_obj_add_style(VersionLabel, &style_title, LV_STATE_DEFAULT);
     lineY += 40;
   }
@@ -1403,6 +1973,36 @@ static void Onboard_create_Setup(lv_obj_t *parent)
     lineY += 20;
   }
 
+  if (true)
+  {
+    lineY += 10;
+    /*Create a normal drop down list*/
+    uartDropDown = lv_dropdown_create(parent);
+    lv_dropdown_set_options(uartDropDown, "GPS Disabled\n"
+                                          "4800\n"
+                                          "9600\n"
+                                          "19200\n"
+                                          "38400\n"
+                                          "115200");
+
+    lv_obj_align(uartDropDown, LV_ALIGN_CENTER, 0, lineY);
+    lv_obj_add_event_cb(uartDropDown, event_handler_gps_menu, LV_EVENT_ALL, NULL);
+
+    lineY += 30;
+  }
+
+  if (true)
+  {
+    SettingStatus4UART = lv_label_create(parent);
+    lv_obj_set_size(SettingStatus4UART, 400, 20);
+    lv_obj_align(SettingStatus4UART, LV_ALIGN_CENTER, 0, lineY);
+    lv_obj_set_style_text_font(SettingStatus4UART, &lv_font_montserrat_16, 0);
+    lv_obj_set_style_text_align(SettingStatus4UART, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_add_style(SettingStatus4UART, &style_title, LV_STATE_DEFAULT);
+    lv_label_set_text(SettingStatus4UART, "NO DATA RECEIVED");
+    lineY += 20;
+  }
+
   lineY += 10;
 
   if (true)
@@ -1417,6 +2017,11 @@ static void Onboard_create_Setup(lv_obj_t *parent)
     lineY += 20;
   }
 }
+
+void lv_example_dropdown_1(void)
+{
+}
+
 static void Onboard_create_Clock(lv_obj_t *parent)
 {
   if (true)
@@ -1467,10 +2072,9 @@ static void Onboard_create_AltimeterDigital(lv_obj_t *parent)
   const int numDigit = 5;
   for (int c = 0; c < numDigit; c++)
   {
-    int k = (DigitFont70x20.header.w + DigitFont70x20.header.h + 8) * (c - 2)-8; // we estimate that you will not fly more than 19999
+    int k = (DigitFont70x20.header.w + DigitFont70x20.header.h + 8) * (c - 2) - 8; // we estimate that you will not fly more than 19999
     CreateSingleDigit(parent, &DigitFont70x20, SegmentsAltDigit[c], k, 0);
   }
-
 
   // 1.0.6 Adding the digital variometer
   if (true)
@@ -1492,6 +2096,27 @@ static void Onboard_create_AltimeterDigital(lv_obj_t *parent)
     lv_obj_set_style_text_font(label, &lv_font_montserrat_16, 0);
     lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
     lv_label_set_text(label, "feet/min");
+    lv_obj_add_style(label, &style_title, LV_STATE_DEFAULT);
+  }
+  if (true)
+  {
+    lv_obj_t *label = lv_label_create(parent);
+    lv_obj_set_size(label, 300, 40);
+    lv_obj_align(label, LV_ALIGN_CENTER, 0, 170);
+    lv_obj_set_style_text_font(label, &lv_font_montserrat_48, 0);
+    lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
+    lv_label_set_text(label, "---.--");
+    lv_obj_add_style(label, &style_title, LV_STATE_DEFAULT);
+    Screen_Altitude_Pressure = label;
+  }
+  if (true)
+  {
+    lv_obj_t *label = lv_label_create(parent);
+    lv_obj_set_size(label, 300, 40);
+    lv_obj_align(label, LV_ALIGN_CENTER, 0, 214);
+    lv_obj_set_style_text_font(label, &lv_font_montserrat_16, 0);
+    lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
+    lv_label_set_text(label, "hPa");
     lv_obj_add_style(label, &style_title, LV_STATE_DEFAULT);
   }
   lv_obj_add_event_cb(parent, speedBgClicked, LV_EVENT_CLICKED, NULL);
@@ -1601,12 +2226,93 @@ static void CreateDigitArray(lv_obj_t *parent, lv_img_dsc_t *font, int howMany, 
   }
 }
 
+void draw_arch(lv_obj_t *parent, const lv_img_dsc_t *t, uint16_t degreeStartSlide, uint16_t degreeEndSlide)
+{
+  for (uint16_t degree = degreeStartSlide; degree <= degreeEndSlide; degree += 15)
+  {
+
+    int16_t sin = lv_trigo_sin(degree - 90) / 327;
+    int16_t cos = lv_trigo_sin(degree) / 327;
+
+    uint32_t y = (sin) * 32 / 100;
+
+    lv_obj_t *slice = lv_img_create(parent);
+    lv_img_set_src(slice, t);
+    lv_obj_set_size(slice, t->header.w, t->header.h);
+    lv_img_set_pivot(slice, 32, 240);
+    lv_obj_align(slice, LV_ALIGN_CENTER, 0, -120 - 96 - 16);
+    lv_img_set_angle(slice, degree * 10);
+  }
+}
+
 static void Onboard_create_Speed(lv_obj_t *parent)
 {
-  lv_obj_t *bg = Onboard_create_Base(parent, &RoundAirSpeed);
-  if (bg != NULL)
+  // Degree shall be multiples of 7.5
+  draw_arch(parent, &arcWhite, 60, 90);
+  draw_arch(parent, &arcGreen, 105, 210);
+  draw_arch(parent, &arcYellow, 225, 300);
+  draw_arch(parent, &arcRed, 315, 315);
+
+  if (true)
   {
+    lv_obj_t *label = lv_label_create(parent);
+    lv_obj_set_size(label, 300, 40);
+    lv_obj_align(label, LV_ALIGN_CENTER, 0, 60);
+    lv_obj_set_style_text_font(label, &lv_font_montserrat_16, 0);
+    lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
+    lv_label_set_text(label, "GPS SPEED KT");
+    lv_obj_add_style(label, &style_title, LV_STATE_DEFAULT);
   }
+
+  uint8_t radius = (460 - 96) / 2;
+  uint8_t speedKt = 0;
+
+  uint8_t numberOfItems = 10;
+
+  uint16_t speedKtIncrement = (speedKtEnd - speedKtStart) / numberOfItems;
+  uint16_t degreeIncrement = (degreeEnd - degreeStart) / numberOfItems;
+
+  for (uint16_t degree = degreeStart; degree <= degreeEnd; degree += degreeIncrement)
+  {
+
+    int16_t sin = lv_trigo_sin(degree - 90) / 327;
+    int16_t cos = lv_trigo_sin(degree) / 327;
+
+    uint32_t x = (cos)*radius / 100;
+    uint32_t y = (sin)*radius / 100;
+
+    // printf("Speed: %d %d %ld %ld\n", degree, speedKt, x, y);
+
+    lv_obj_t *label = lv_label_create(parent);
+    lv_obj_set_size(label, 94, 48);
+    lv_obj_align(label, LV_ALIGN_CENTER, x + 4, y);
+    lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_set_style_text_font(label, &lv_font_montserrat_48, 0);
+    lv_obj_set_style_text_color(label, lv_color_white(), 0);
+
+    char buf[4];
+    snprintf(buf, sizeof(buf), "%d", speedKtStart + (speedKt));
+    speedKt += speedKtIncrement;
+    lv_label_set_text(label, buf);
+  }
+
+  Screen_Speed_SpeedTick = lv_img_create(parent);
+  lv_img_set_src(Screen_Speed_SpeedTick, &fi_needle);
+  lv_obj_set_size(Screen_Speed_SpeedTick, fi_needle.header.w, fi_needle.header.h);
+  lv_obj_align(Screen_Speed_SpeedTick, LV_ALIGN_CENTER, 0, 0);
+
+  Screen_Speed_SpeedText = lv_label_create(parent);
+  lv_obj_set_size(Screen_Speed_SpeedText, 128, 48);
+  lv_obj_align(Screen_Speed_SpeedText, LV_ALIGN_CENTER, 0, 0);
+  lv_obj_set_style_text_align(Screen_Speed_SpeedText, LV_TEXT_ALIGN_CENTER, 0);
+  lv_obj_set_style_text_font(Screen_Speed_SpeedText, &lv_font_montserrat_48, 0);
+  lv_obj_set_style_text_color(Screen_Speed_SpeedText, lv_color_white(), 0);
+  lv_obj_set_style_bg_color(Screen_Speed_SpeedText, lv_color_black(), 0);
+  lv_obj_set_style_radius(Screen_Speed_SpeedText, LV_RADIUS_CIRCLE, 0);
+  char buf[4];
+  snprintf(buf, sizeof(buf), "%d", 0);
+  lv_label_set_text(Screen_Speed_SpeedText, buf);
+
   lv_obj_add_event_cb(parent, speedBgClicked, LV_EVENT_CLICKED, NULL);
 }
 
@@ -1688,7 +2394,31 @@ static void Onboard_create_TurnSlip(lv_obj_t *parent)
 
 static void Onboard_create_Track(lv_obj_t *parent)
 {
-  Onboard_create_Base(parent, &RoundGyro);
+  Screen_Gyro_Gear = Onboard_create_Base(parent, &RoundGyro);
+  Onboard_create_Base(parent, &RoundGyroHeading);
+
+  if (true)
+  {
+    lv_obj_t *label = lv_label_create(parent);
+    lv_obj_set_size(label, 300, 40);
+    lv_obj_align(label, LV_ALIGN_CENTER, 0, -26);
+    lv_obj_set_style_text_font(label, &lv_font_montserrat_16, 0);
+    lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
+    lv_label_set_text(label, "GPS TRACK");
+    lv_obj_add_style(label, &style_title, LV_STATE_DEFAULT);
+  }
+
+  Screen_Track_TrackText = lv_label_create(parent);
+  lv_obj_set_size(Screen_Track_TrackText, 128, 48);
+  lv_obj_align(Screen_Track_TrackText, LV_ALIGN_CENTER, 8, -8); // Displacement to center the "°"
+  lv_obj_set_style_text_align(Screen_Track_TrackText, LV_TEXT_ALIGN_CENTER, 0);
+  lv_obj_set_style_text_font(Screen_Track_TrackText, &lv_font_montserrat_48, 0);
+  lv_obj_set_style_text_color(Screen_Track_TrackText, lv_color_white(), 0);
+  lv_obj_set_style_bg_color(Screen_Track_TrackText, lv_color_black(), 0);
+  lv_obj_set_style_radius(Screen_Track_TrackText, LV_RADIUS_CIRCLE, 0);
+  char buf[4];
+  snprintf(buf, sizeof(buf), "%d°", 0);
+  lv_label_set_text(Screen_Track_TrackText, buf);
   lv_obj_add_event_cb(parent, speedBgClicked, LV_EVENT_CLICKED, NULL);
 }
 
@@ -1862,7 +2592,8 @@ void turnOnOffDigits(lv_obj_t **segments, uint8_t number)
 
 void update_AltimeterDigital_lvgl_tick(lv_timer_t *t)
 {
-  int32_t AltimeterAbsolute = Altimeter;
+  // 1.0.9 Altimter is *100 Feet
+  int32_t AltimeterAbsolute = Altimeter / 100.0;
   if (Altimeter < 0)
   {
     AltimeterAbsolute = -Altimeter;
@@ -1902,8 +2633,14 @@ void update_AltimeterDigital_lvgl_tick(lv_timer_t *t)
   */
 
   char buf[10];
+  // 1.0.9 Variometer is *100 and 1Hz
+  // Variometer => 0.01 Feet/Second => *60/100 => Feet/min
+  int32_t VariometerFeetMin = Variometer * 6.0 / 10.0;
   snprintf(buf, sizeof(buf), "%+ld", Variometer);
   lv_label_set_text(Screen_Altitude_Variometer2, buf);
+
+  snprintf(buf, sizeof(buf), "%.02f", bmp280Pressure / 10.0);
+  lv_label_set_text(Screen_Altitude_Pressure, buf);
 }
 
 void update_Clock_lvgl_tick(lv_timer_t *t)

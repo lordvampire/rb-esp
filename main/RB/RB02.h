@@ -11,6 +11,7 @@
 #include "Buzzer.h"
 #include "BAT_Driver.h"
 #include "ST7701S.h"
+#include "driver/uart.h"
 
 #define EXAMPLE1_LVGL_TICK_PERIOD_MS  1000
 

@@ -15,13 +15,28 @@
 
 #include "BAT_Driver.h"
 
+// 1.0.9 Install in the loop BMP280
+void Get_BMP280(void); // Declaration
+extern uint8_t workflow; // When sensor is ready (After Calibration)
 void Driver_Loop(void *parameter)
 {
+    int loopThreshold = 10; // Delay the polling of certain sensors
     while(1)
     {
         QMI8658_Loop();
         RTC_Loop();
+        // Delay the polling of certain sensors
+        if(loopThreshold==0)
+        {
+            loopThreshold = 10;
+            // When sensor is ready (After Calibration)
+            if(workflow>100)
+            {
         BAT_Get_Volts();
+                Get_BMP280();
+            }
+        }
+        loopThreshold--;
         vTaskDelay(pdMS_TO_TICKS(100));
     }
     vTaskDelete(NULL);
@@ -58,6 +73,13 @@ void app_main(void)
 
     //Wireless_Init();
     Driver_Init();
+
+    // 1.0.9
+    // Install the UART Driver as soon as possible
+    uart_driver_install(1, 256, 0, 0, NULL, 0);
+    // Set PIN for Waveshare 2.8" Round based on Wiki Schematics
+    uart_set_pin(1, UART_PIN_NO_CHANGE, GPIO_NUM_44, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
+
     LCD_Init();
     Touch_Init();
     //SD_Init();
