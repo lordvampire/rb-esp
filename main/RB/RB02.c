@@ -36,19 +36,25 @@
  * - https://www.waveshare.com/esp32-s3-touch-lcd-2.8c.htm
  */
 #include "RB02.h"
+// 1.1.2 Version is here
+#define RB_VERSION "1.1.2"
+// 1.1.1 Remove tabs with GPS if not installed
+//#define RB_ENABLE_GPS 1
+
 // Images pre-loaded
+#ifdef ENABLE_DEMO_SCREENS
 #include "RoundSynthViewAttitude.c"
-#include "RoundAirSpeed.c"
-#include "RoundAltitude.c"
-#include "RoundTurnCoordinator.c"
+#endif
+
+#include "RoundAltimeter.c"
+
 #include "RoundGyro.c"
 #include "RoundGyroHeading.c"
 #include "RoundVariometer.c"
 #include "turn_coordinator.c"
 #include "fi_tc_airplane.c"
 #include "horizon_ball.c"
-#include "attitude_foreground.c"
-#include "attitude_background.c"
+
 #include "fi_needle.c"
 #include "fi_needle_small.c"
 #include "GMeter.c"
@@ -56,10 +62,12 @@
 #include "Sky.c"
 #include "AttitudePlain.c"
 #include "AttitudeMiddle.c"
+#ifdef ENABLE_DEMO_SCREENS
 #include "RoundSynthViewSide.c"
 #include "Radar.c"
 #include "RoundMapWithControlledSpaces.c"
 #include "RoundHSI.c"
+#endif
 #include "att_circle_top_TL.c"
 #include "att_circle_top_TR.c"
 #include "att_circle_top_T.c"
@@ -204,14 +212,17 @@ int32_t GpsSpeed0ForDisable = 0;
 #define BMP280_S64_t int64_t
 #define BMP280_U32_t uint32_t
 #define BMP280_S32_t int32_t
-
+#ifdef RB_ENABLE_GPS
 static const int RX_BUF_SIZE = 1024;
 #define TXD_PIN (GPIO_NUM_43)
 #define RXD_PIN (GPIO_NUM_44)
 #define UART_N UART_NUM_1
+#endif
 // Prototype declaration
 static lv_obj_t *Onboard_create_Base(lv_obj_t *parent, const lv_img_dsc_t *backgroundImage);
+#ifdef RB_ENABLE_GPS
 static void Onboard_create_Speed(lv_obj_t *parent);
+#endif
 static void Onboard_create_Attitude(lv_obj_t *parent);
 static void Onboard_create_Altimeter(lv_obj_t *parent);
 static void Onboard_create_AltimeterDigital(lv_obj_t *parent);
@@ -223,13 +234,15 @@ static void Onboard_create_Variometer(lv_obj_t *parent);
 static void Onboard_create_GMeter(lv_obj_t *parent);
 static void Onboard_create_Setup(lv_obj_t *parent);
 static void speedBgClicked(lv_event_t *event);
-
+uint32_t timerDiffByIndex(int st);
 void rb_increase_lvgl_tick(lv_timer_t *t);
 void update_GMeter_lvgl_tick(lv_timer_t *t);
 void update_Clock_lvgl_tick(lv_timer_t *t);
 void update_AltimeterDigital_lvgl_tick(lv_timer_t *t);
 void update_Altimeter_lvgl_tick(lv_timer_t *t);
+#ifdef RB_ENABLE_GPS
 void uart_fetch_data();
+#endif
 void nvsStorePCal();
 void nvsStoreUARTBaudrate();
 
@@ -263,12 +276,16 @@ typedef enum
   // RB02_TAB_HSI,
   RB02_TAB_MAP,
 #endif
+#ifdef RB_ENABLE_GPS
   RB02_TAB_SPD,
+#endif
   RB02_TAB_ATT,
   RB02_TAB_ALT,
   RB02_TAB_ALD,
   RB02_TAB_TRN,
+#ifdef RB_ENABLE_GPS
   RB02_TAB_TRK,
+#endif
   RB02_TAB_VAR,
   RB02_TAB_GMT,
   RB02_TAB_CLK,
@@ -276,7 +293,9 @@ typedef enum
   RB02_TAB_DEV
 } tabs;
 
+static lv_obj_t *kb;
 lv_obj_t *uartDropDown = NULL;
+lv_obj_t *kmhDropDown = NULL;
 lv_obj_t *SettingStatus0 = NULL;
 lv_obj_t *SettingStatus1 = NULL;
 lv_obj_t *SettingStatus2 = NULL;
@@ -332,10 +351,25 @@ lv_obj_t *GMeterLabelMax = NULL;
 float GMeterScale = 3.0;
 IMUdata GyroBiasAcquire[3];
 lv_obj_t *mbox1 = NULL;
+uint8_t isKmh = 0;
 uint16_t degreeStart = 0;
 uint16_t degreeEnd = 320;
-uint8_t speedKtStart = 0;
-uint8_t speedKtEnd = 200;
+uint16_t speedKtStart = 0;
+uint16_t speedKtEnd = 200;
+uint16_t speedWhite = 60;
+uint16_t speedGreen = 105;
+uint16_t speedYellow = 225;
+uint16_t speedRed = 315;
+lv_obj_t *t_speedSummary = NULL;
+lv_obj_t *t_speedStart = NULL;
+lv_obj_t *t_speedEnd = NULL;
+lv_obj_t *t_speedStartSpeed = NULL;
+lv_obj_t *t_speedEndSpeed = NULL;
+lv_obj_t *t_speedWhite = NULL;
+lv_obj_t *t_speedGreen = NULL;
+lv_obj_t *t_speedYellow = NULL;
+lv_obj_t *t_speedRed = NULL;
+
 uint8_t workflow = 0;
 int32_t bmp280override = 0;
 int32_t bmp280Calibration[12];
@@ -402,12 +436,16 @@ void RB02_Example1(void)
   // lv_obj_t *ty = lv_tabview_add_tab(tv, "HSI");
   lv_obj_t *t0 = lv_tabview_add_tab(tv, "Map");
 #endif
+#ifdef RB_ENABLE_GPS
   lv_obj_t *t1 = lv_tabview_add_tab(tv, "Speed");
+#endif
   lv_obj_t *t2 = lv_tabview_add_tab(tv, "Attitude");
   lv_obj_t *t3 = lv_tabview_add_tab(tv, "Altimeter");
   lv_obj_t *t3b = lv_tabview_add_tab(tv, "Altimeter");
   lv_obj_t *t4 = lv_tabview_add_tab(tv, "TurnSlip");
+#ifdef RB_ENABLE_GPS
   lv_obj_t *t5 = lv_tabview_add_tab(tv, "Track");
+#endif
   lv_obj_t *t6 = lv_tabview_add_tab(tv, "Variometer");
   lv_obj_t *t7 = lv_tabview_add_tab(tv, "GMeter");
   lv_obj_t *t8 = lv_tabview_add_tab(tv, "Clock");
@@ -424,13 +462,16 @@ void RB02_Example1(void)
   Onboard_create_Base(t0, &RoundMapWithControlledSpaces);
   lv_obj_add_event_cb(t0, speedBgClicked, LV_EVENT_CLICKED, NULL);
 #endif
-
+#ifdef RB_ENABLE_GPS
   Onboard_create_Speed(t1);
+#endif
   Onboard_create_Attitude(t2);
   Onboard_create_Altimeter(t3);
   Onboard_create_AltimeterDigital(t3b);
   Onboard_create_TurnSlip(t4);
+#ifdef RB_ENABLE_GPS
   Onboard_create_Track(t5);
+#endif
   Onboard_create_Variometer(t6);
   Onboard_create_GMeter(t7);
   Onboard_create_Clock(t8);
@@ -657,7 +698,7 @@ bool nmea_RMC_mini_parser(const uint8_t *sentence, uint16_t length)
 
   return true;
 }
-
+#ifdef RB_ENABLE_GPS
 void uart_fetch_data()
 {
   if (GpsSpeed0ForDisable == 0)
@@ -695,7 +736,7 @@ void uart_fetch_data()
   }
   free(data);
 }
-
+#endif
 void nvsRestoreGMeter()
 {
   //
@@ -794,6 +835,59 @@ void nvsRestoreGMeter()
     }
 
     GFactorDirty = 0;
+
+    nvs_get_u8(my_handle, "isKmh", &isKmh);
+    nvs_get_u16(my_handle, "degreeStart", &degreeStart);
+    nvs_get_u16(my_handle, "degreeEnd", &degreeEnd);
+    nvs_get_u16(my_handle, "speedKtStart", &speedKtStart);
+    nvs_get_u16(my_handle, "speedKtEnd", &speedKtEnd);
+    nvs_get_u16(my_handle, "speedWhite", &speedWhite);
+    nvs_get_u16(my_handle, "speedGreen", &speedGreen);
+    nvs_get_u16(my_handle, "speedYellow", &speedYellow);
+    nvs_get_u16(my_handle, "speedRed", &speedRed);
+
+    nvs_close(my_handle);
+  }
+}
+
+void nvsStoreSpeedArc()
+{
+  //
+  nvs_handle_t my_handle;
+  esp_err_t err = nvs_open("storage", NVS_READWRITE, &my_handle);
+  if (err != ESP_OK)
+  {
+    printf("Error (%s) opening NVS handle!\n", esp_err_to_name(err));
+  }
+  else
+  {
+    printf("Writing Speed to NVS ... ");
+    err = nvs_set_u8(my_handle, "isKmh", isKmh);
+    printf((err != ESP_OK) ? "Failed to update isKmh!\n" : "Done\n");
+    printf("Writing Speed to NVS ... ");
+    err = nvs_set_u16(my_handle, "degreeStart", degreeStart);
+    printf((err != ESP_OK) ? "Failed to update degreeStart!\n" : "Done\n");
+    printf("Writing Speed to NVS ... ");
+    err = nvs_set_u16(my_handle, "degreeEnd", degreeEnd);
+    printf((err != ESP_OK) ? "Failed to update degreeEnd!\n" : "Done\n");
+    printf("Writing Speed to NVS ... ");
+    err = nvs_set_u16(my_handle, "speedKtStart", speedKtStart);
+    printf((err != ESP_OK) ? "Failed to update speedKtStart!\n" : "Done\n");
+    printf("Writing Speed to NVS ... ");
+    err = nvs_set_u16(my_handle, "speedKtEnd", speedKtEnd);
+    printf((err != ESP_OK) ? "Failed to update speedKtEnd!\n" : "Done\n");
+    printf("Writing Speed to NVS ... ");
+    err = nvs_set_u16(my_handle, "speedWhite", speedWhite);
+    printf((err != ESP_OK) ? "Failed to update speedWhite!\n" : "Done\n");
+    printf("Writing Speed to NVS ... ");
+    err = nvs_set_u16(my_handle, "speedGreen", speedGreen);
+    printf((err != ESP_OK) ? "Failed to update speedGreen!\n" : "Done\n");
+    printf("Writing Speed to NVS ... ");
+    err = nvs_set_u16(my_handle, "speedYellow", speedYellow);
+    printf((err != ESP_OK) ? "Failed to update speedYellow!\n" : "Done\n");
+    printf("Writing Speed to NVS ... ");
+    err = nvs_set_u16(my_handle, "speedRed", speedRed);
+    printf((err != ESP_OK) ? "Failed to update speedRed!\n" : "Done\n");
     nvs_close(my_handle);
   }
 }
@@ -907,7 +1001,8 @@ void update_Attitude_lvgl_tick(lv_timer_t *t)
   }
   lastAttitudePitch = moveY;
   lastAttitudeRoll = -AttitudeRoll;
-
+  // 1.1.1 Rotation of Aircraft symbol
+  lv_img_set_angle(Screen_Attitude_Pitch, 1800 + lastAttitudeRoll * 10.0);
   lv_obj_set_pos(Screen_Attitude_Pitch, 0, -lastAttitudePitch + att_aircraft.header.h / 2);
 
   for (int a = 0; a < 4; a++)
@@ -1079,7 +1174,8 @@ void example1_BMP280_lvgl_tick(lv_timer_t *t)
   // 1.0.9 Variometer is filterd
   Variometer = (Variometer + VariometerInstant) / 2;
   Altimeter = AltimeterNew;
-
+// 1.1.1
+#ifdef RB_ENABLE_CONSOLE_DEBUG
   printf("BMP280 ");
   for (int i = 0; i < 6; i++)
   {
@@ -1100,6 +1196,7 @@ void example1_BMP280_lvgl_tick(lv_timer_t *t)
          Gyro.x,
          Gyro.y,
          Gyro.z);
+#endif
 }
 void Get_BMP280(void)
 {
@@ -1129,13 +1226,33 @@ void update_Speed_lvgl_tick(lv_timer_t *t)
   {
     // printf("NMEA: Speed %d-->%d m/s Angle: %ld\n", lastSpeed, speed, (int32_t)(speed));
     lastSpeed = speed;
-    int32_t speedAngle = (speed);
-    // Range 0kmh->360kmh
+    // 1.1.2 You can configure the ARCs and Min-Max speed displayed
+    float rangeDegree = degreeEnd - degreeStart;
+    float rangeKt = speedKtEnd - speedKtStart;
+    float ratioDK = (rangeDegree) / (rangeKt);
 
-    lv_img_set_angle(Screen_Speed_SpeedTick, degreeStart + speedAngle + 900);
+    float isKt = 1.852;
+    if (isKmh == 1)
+    {
+      isKt = 1.0;
+    }
+    int speedCapped = (speed / isKt) - (speedKtStart * 10);
+    /*
+    if (speedCapped < 0)
+    {
+      // We decided to stay "before" nearby the first indicator
+      speedCapped = -rangeKt/5;
+    }
+      */
+    int32_t speedAngle = degreeStart * 10 + (ratioDK * speedCapped);
+    if(speedAngle<0){
+      speedAngle=0;
+    }
+
+    lv_img_set_angle(Screen_Speed_SpeedTick, speedAngle + 900);
 
     char buf[15];
-    snprintf(buf, sizeof(buf), "%.0f", NMEA_DATA.speed / 1.852); // KT
+    snprintf(buf, sizeof(buf), "%.0f", NMEA_DATA.speed / isKt); // KT
     lv_label_set_text(Screen_Speed_SpeedText, buf);
   }
 }
@@ -1160,7 +1277,7 @@ void update_Altimeter_lvgl_tick(lv_timer_t *t)
   lv_img_set_angle(Screen_Altitude_Miles, milesDegree + 900);
   lv_img_set_angle(Screen_Altitude_Cents, centsDegree + 900);
 }
-
+#ifdef RB_ENABLE_GPS
 void uartApplyRates()
 {
   lv_label_set_text(SettingStatus4UART, "NO DATA RECEIVED");
@@ -1180,7 +1297,7 @@ void uartApplyRates()
     uart_param_config(1, &uart_config);
   }
 }
-
+#endif 
 void bmp280Setup()
 {
   uint8_t bmp280Control[1] = {0x57};
@@ -1266,6 +1383,7 @@ void rb_increase_lvgl_tick(lv_timer_t *t)
       stopwatch = datetime;
       break;
     case 91:
+    #ifdef RB_ENABLE_GPS
       uartApplyRates();
       switch (GpsSpeed0ForDisable)
       {
@@ -1288,6 +1406,9 @@ void rb_increase_lvgl_tick(lv_timer_t *t)
         lv_dropdown_set_selected(uartDropDown, 5);
         break;
       }
+    #else
+    GpsSpeed0ForDisable = 0;
+    #endif
       break;
     case 100:
 
@@ -1320,6 +1441,7 @@ void rb_increase_lvgl_tick(lv_timer_t *t)
 
   switch (((lv_tabview_t *)tv)->tab_cur)
   {
+#ifdef RB_ENABLE_GPS
   case RB02_TAB_SPD:
     uart_fetch_data();
     update_Speed_lvgl_tick(t);
@@ -1328,6 +1450,7 @@ void rb_increase_lvgl_tick(lv_timer_t *t)
     uart_fetch_data();
     update_Track_lvgl_tick(t);
     break;
+#endif
   case RB02_TAB_DEV:
     break;
   case RB02_TAB_VAR:
@@ -1384,8 +1507,9 @@ void rb_increase_lvgl_tick(lv_timer_t *t)
             bmp280Temperature / 100.0,
             bmp280Pressure / 100.0);
     lv_label_set_text(SettingStatus3, buf);
-
+#ifdef RB_ENABLE_GPS
     uart_fetch_data();
+#endif
   }
   break;
   }
@@ -1506,10 +1630,11 @@ static void actionInTab(touchLocation location)
       break;
     }
 
-    char buf[15];
-    snprintf(buf, sizeof(buf), "%03u", QNH % 1000);
+    char buf[25];
+    snprintf(buf, sizeof(buf), "%03u", QNH);
     lv_label_set_text(Screen_Altitude_QNH, buf);
-    snprintf(buf, sizeof(buf), "QNH: %u", QNH);
+        // 1.1.2 added mmHg conversion
+    snprintf(buf, sizeof(buf), "QNH: %u %.02f", QNH, ((float)QNH)/33.8639);
     lv_label_set_text(Screen_Altitude_QNH2, buf);
     snprintf(buf, sizeof(buf), "%+ld", Variometer);
     lv_label_set_text(Screen_Altitude_Variometer2, buf);
@@ -1521,6 +1646,8 @@ static void actionInTab(touchLocation location)
   case RB02_TAB_CLK:
     switch (location)
     {
+    case RB02_TOUCH_SE:
+    case RB02_TOUCH_SW:
     case RB02_TOUCH_N:
     {
       selectedTimer++;
@@ -1532,6 +1659,28 @@ static void actionInTab(touchLocation location)
       sprintf(buf, "TIMER %u", selectedTimer + 1);
       lv_label_set_text(TimerLabelTop, buf);
       update_Clock_lvgl_tick(NULL);
+
+      switch (selectedTimer)
+      {
+      case 0:
+        sprintf(buf, "TIMER %u", 2);
+        lv_label_set_text(TimerLabelSW, buf);
+        sprintf(buf, "TIMER %u", 3);
+        lv_label_set_text(TimerLabelSE, buf);
+        break;
+      case 1:
+        sprintf(buf, "TIMER %u", 1);
+        lv_label_set_text(TimerLabelSW, buf);
+        sprintf(buf, "TIMER %u", 3);
+        lv_label_set_text(TimerLabelSE, buf);
+        break;
+      case 2:
+        sprintf(buf, "TIMER %u", 1);
+        lv_label_set_text(TimerLabelSW, buf);
+        sprintf(buf, "TIMER %u", 2);
+        lv_label_set_text(TimerLabelSE, buf);
+        break;
+      }
     }
     break;
     case RB02_TOUCH_S:
@@ -1682,6 +1831,38 @@ static void AltimeterOverrideChanged(lv_event_t *e)
   nvsStorePCal();
 }
 
+static void SpeedDegreeStartChanged(lv_event_t *e)
+{
+  uint16_t new_Start = 15*lv_slider_get_value(t_speedStart);
+  uint16_t new_End = 15*lv_slider_get_value(t_speedEnd);
+  uint16_t new_StartSpeed = 10*lv_slider_get_value(t_speedStartSpeed);
+  uint16_t new_EndSpeed = 10*lv_slider_get_value(t_speedEndSpeed);
+  uint16_t new_White = 15*lv_slider_get_value(t_speedWhite);
+  uint16_t new_Green = 15*lv_slider_get_value(t_speedGreen);
+  uint16_t new_Yellow = 15*lv_slider_get_value(t_speedYellow);
+  uint16_t new_Red = 15*lv_slider_get_value(t_speedRed);
+
+  degreeStart = new_Start;
+  degreeEnd = new_End;
+  speedKtStart = new_StartSpeed;
+  speedKtEnd = new_EndSpeed;
+  speedWhite = new_White;
+  speedGreen = new_Green;
+  speedYellow = new_Yellow;
+  speedRed = new_Red;
+
+  char buf[60];
+  snprintf(buf, 60, "%u->%u %u->%u W:%u G:%u Y:%u R:%u",
+           degreeStart,
+           degreeEnd,
+           speedKtStart,
+           speedKtEnd,
+           speedWhite,
+           speedGreen,
+           speedYellow,
+           speedRed);
+  lv_label_set_text(t_speedSummary, buf);
+}
 static void DisableFilteringChanged(lv_event_t *e)
 {
   uint8_t FilterMoltiplierInt = lv_slider_get_value(lv_event_get_target(e));
@@ -1706,6 +1887,26 @@ static void GMeterMaxChanged(lv_event_t *e)
   GMeterScale = value;
 }
 
+// 1.1.2
+static void event_handler_kmh_menu(lv_event_t *e)
+{
+  lv_event_code_t code = lv_event_get_code(e);
+  lv_obj_t *obj = lv_event_get_target(e);
+  if (code == LV_EVENT_VALUE_CHANGED)
+  {
+    char buf[32];
+    lv_dropdown_get_selected_str(obj, buf, sizeof(buf));
+    LV_LOG_USER("Option: %s", buf);
+
+    if (strcmp(buf, "Imperial Units") == 0)
+      isKmh = 0;
+    if (strcmp(buf, "Metric Units") == 0)
+      isKmh = 1;
+
+    nvsStoreSpeedArc();
+  }
+}
+#ifdef RB_ENABLE_GPS
 static void event_handler_gps_menu(lv_event_t *e)
 {
   lv_event_code_t code = lv_event_get_code(e);
@@ -1733,7 +1934,7 @@ static void event_handler_gps_menu(lv_event_t *e)
     nvsStoreUARTBaudrate();
   }
 }
-
+#endif
 static void Onboard_create_Setup(lv_obj_t *parent)
 {
   int lineY = -200;
@@ -1757,7 +1958,7 @@ static void Onboard_create_Setup(lv_obj_t *parent)
     lv_obj_align(VersionLabel, LV_ALIGN_CENTER, 0, lineY);
     lv_obj_set_style_text_align(VersionLabel, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_set_style_text_font(VersionLabel, &lv_font_montserrat_16, 0);
-    lv_label_set_text(VersionLabel, "Version 1.1.0B");
+    lv_label_set_text(VersionLabel, "Version " RB_VERSION);
     lv_obj_add_style(VersionLabel, &style_title, LV_STATE_DEFAULT);
     lineY += 40;
   }
@@ -1972,10 +2173,10 @@ static void Onboard_create_Setup(lv_obj_t *parent)
     lv_obj_add_style(SettingStatus3, &style_title, LV_STATE_DEFAULT);
     lineY += 20;
   }
-
+#ifdef RB_ENABLE_GPS
   if (true)
   {
-    lineY += 10;
+    lineY += 20;
     /*Create a normal drop down list*/
     uartDropDown = lv_dropdown_create(parent);
     lv_dropdown_set_options(uartDropDown, "GPS Disabled\n"
@@ -2000,11 +2201,309 @@ static void Onboard_create_Setup(lv_obj_t *parent)
     lv_obj_set_style_text_align(SettingStatus4UART, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_add_style(SettingStatus4UART, &style_title, LV_STATE_DEFAULT);
     lv_label_set_text(SettingStatus4UART, "NO DATA RECEIVED");
-    lineY += 20;
+    lineY += 30;
+  }
+#else
+  if (true)
+  {
+    SettingStatus4UART = lv_label_create(parent);
+    lv_obj_set_size(SettingStatus4UART, 400, 20);
+    lv_obj_align(SettingStatus4UART, LV_ALIGN_CENTER, 0, lineY);
+    lv_obj_set_style_text_font(SettingStatus4UART, &lv_font_montserrat_16, 0);
+    lv_obj_set_style_text_align(SettingStatus4UART, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_add_style(SettingStatus4UART, &style_title, LV_STATE_DEFAULT);
+    lv_label_set_text(SettingStatus4UART, "GPS NOT ENABLED");
+    lineY += 30;
+  }
+#endif
+    if (true)
+  {
+    lv_obj_t *label = lv_label_create(parent);
+    lv_obj_set_size(label, 400, 20);
+    lv_obj_align(label, LV_ALIGN_CENTER, 0, lineY);
+    lv_obj_set_style_text_font(label, &lv_font_montserrat_16, 0);
+    lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_add_style(label, &style_title, LV_STATE_DEFAULT);
+    lv_label_set_text(label, "SPEED SETUP");
+
+    lineY += 25;
+  }
+
+
+  if (true)
+  {
+    lineY += 10;
+    /*Create a normal drop down list*/
+    kmhDropDown = lv_dropdown_create(parent);
+    lv_dropdown_set_options(kmhDropDown, "Imperial Units\n"
+                                         "Metric Units");
+
+    lv_obj_align(kmhDropDown, LV_ALIGN_CENTER, 0, lineY);
+    lv_obj_add_event_cb(kmhDropDown, event_handler_kmh_menu, LV_EVENT_ALL, NULL);
+    lv_dropdown_set_selected(kmhDropDown, isKmh);
+    lineY += 30;
+  }
+
+
+  if (true)
+  {
+    t_speedSummary = lv_label_create(parent);
+    lv_obj_set_size(t_speedSummary, 400, 20);
+    lv_obj_align(t_speedSummary, LV_ALIGN_CENTER, 0, lineY);
+    lv_obj_set_style_text_font(t_speedSummary, &lv_font_montserrat_16, 0);
+    lv_obj_set_style_text_align(t_speedSummary, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_add_style(t_speedSummary, &style_title, LV_STATE_DEFAULT);
+    char buf[60];
+    snprintf(buf, 60, "%u->%u %u->%u W:%u G:%u Y:%u R:%u",
+             degreeStart,
+             degreeEnd,
+             speedKtStart,
+             speedKtEnd,
+             speedWhite,
+             speedGreen,
+             speedYellow,
+             speedRed);
+    lv_label_set_text(t_speedSummary, buf);
+
+    lineY += 25;
+  }
+
+  if (true)
+  {
+    lv_obj_t *progressObject = lv_slider_create(parent);
+    lv_obj_add_flag(progressObject, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_set_size(progressObject, 300, 35);
+    lv_obj_set_style_radius(progressObject, 3, LV_PART_KNOB); // Adjust the value for more or less rounding
+    lv_obj_set_style_bg_opa(progressObject, LV_OPA_TRANSP, LV_PART_KNOB);
+
+    lv_obj_set_style_bg_color(progressObject, lv_color_hex(0xAAAAAA), LV_PART_KNOB);
+    lv_obj_set_style_bg_color(progressObject, lv_color_hex(0xFFFFFF), LV_PART_INDICATOR);
+    lv_obj_set_style_outline_width(progressObject, 2, LV_PART_INDICATOR);
+    lv_obj_set_style_outline_color(progressObject, lv_color_hex(0xD3D3D3), LV_PART_INDICATOR);
+    lv_slider_set_range(progressObject, 0, 23);
+    lv_slider_set_value(progressObject, degreeStart/15, LV_ANIM_OFF);
+    lv_obj_add_event_cb(progressObject, SpeedDegreeStartChanged, LV_EVENT_VALUE_CHANGED, progressObject);
+    lv_obj_align(progressObject, LV_ALIGN_CENTER, 0, lineY + 30);
+
+    lv_obj_t *progressObjectLabel = lv_label_create(parent);
+    lv_obj_set_size(progressObjectLabel, 300, 20);
+    lv_obj_align(progressObjectLabel, LV_ALIGN_CENTER, 0, lineY);
+    lv_obj_set_style_text_align(progressObjectLabel, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_set_style_text_font(progressObjectLabel, &lv_font_montserrat_16, 0);
+    lv_label_set_text(progressObjectLabel, "Speed start degree");
+    lv_obj_add_style(progressObjectLabel, &style_title, LV_STATE_DEFAULT);
+
+    t_speedStart = progressObject;
+
+    lineY += 70;
+  }
+  if (true)
+  {
+    lv_obj_t *progressObject = lv_slider_create(parent);
+    lv_obj_add_flag(progressObject, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_set_size(progressObject, 300, 35);
+    lv_obj_set_style_radius(progressObject, 3, LV_PART_KNOB); // Adjust the value for more or less rounding
+    lv_obj_set_style_bg_opa(progressObject, LV_OPA_TRANSP, LV_PART_KNOB);
+
+    lv_obj_set_style_bg_color(progressObject, lv_color_hex(0xAAAAAA), LV_PART_KNOB);
+    lv_obj_set_style_bg_color(progressObject, lv_color_hex(0xFFFFFF), LV_PART_INDICATOR);
+    lv_obj_set_style_outline_width(progressObject, 2, LV_PART_INDICATOR);
+    lv_obj_set_style_outline_color(progressObject, lv_color_hex(0xD3D3D3), LV_PART_INDICATOR);
+    lv_slider_set_range(progressObject, 1, 24);
+    lv_slider_set_value(progressObject, degreeEnd/15, LV_ANIM_OFF);
+    lv_obj_add_event_cb(progressObject, SpeedDegreeStartChanged, LV_EVENT_VALUE_CHANGED, progressObject);
+    lv_obj_align(progressObject, LV_ALIGN_CENTER, 0, lineY + 30);
+
+    lv_obj_t *progressObjectLabel = lv_label_create(parent);
+    lv_obj_set_size(progressObjectLabel, 300, 20);
+    lv_obj_align(progressObjectLabel, LV_ALIGN_CENTER, 0, lineY);
+    lv_obj_set_style_text_align(progressObjectLabel, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_set_style_text_font(progressObjectLabel, &lv_font_montserrat_16, 0);
+    lv_label_set_text(progressObjectLabel, "Speed end degree");
+    lv_obj_add_style(progressObjectLabel, &style_title, LV_STATE_DEFAULT);
+
+    t_speedEnd = progressObject;
+
+    lineY += 70;
+  }
+
+  if (true)
+  {
+    lv_obj_t *progressObject = lv_slider_create(parent);
+    lv_obj_add_flag(progressObject, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_set_size(progressObject, 300, 35);
+    lv_obj_set_style_radius(progressObject, 3, LV_PART_KNOB); // Adjust the value for more or less rounding
+    lv_obj_set_style_bg_opa(progressObject, LV_OPA_TRANSP, LV_PART_KNOB);
+
+    lv_obj_set_style_bg_color(progressObject, lv_color_hex(0xAAAAAA), LV_PART_KNOB);
+    lv_obj_set_style_bg_color(progressObject, lv_color_hex(0xFFFFFF), LV_PART_INDICATOR);
+    lv_obj_set_style_outline_width(progressObject, 2, LV_PART_INDICATOR);
+    lv_obj_set_style_outline_color(progressObject, lv_color_hex(0xD3D3D3), LV_PART_INDICATOR);
+    lv_slider_set_range(progressObject, 0, 10);
+    lv_slider_set_value(progressObject, speedKtStart/10, LV_ANIM_OFF);
+    lv_obj_add_event_cb(progressObject, SpeedDegreeStartChanged, LV_EVENT_VALUE_CHANGED, progressObject);
+    lv_obj_align(progressObject, LV_ALIGN_CENTER, 0, lineY + 30);
+
+    lv_obj_t *progressObjectLabel = lv_label_create(parent);
+    lv_obj_set_size(progressObjectLabel, 300, 20);
+    lv_obj_align(progressObjectLabel, LV_ALIGN_CENTER, 0, lineY);
+    lv_obj_set_style_text_align(progressObjectLabel, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_set_style_text_font(progressObjectLabel, &lv_font_montserrat_16, 0);
+    lv_label_set_text(progressObjectLabel, "Speed start");
+    lv_obj_add_style(progressObjectLabel, &style_title, LV_STATE_DEFAULT);
+
+    t_speedStartSpeed = progressObject;
+
+    lineY += 70;
+  }
+  if (true)
+  {
+    lv_obj_t *progressObject = lv_slider_create(parent);
+    lv_obj_add_flag(progressObject, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_set_size(progressObject, 300, 35);
+    lv_obj_set_style_radius(progressObject, 3, LV_PART_KNOB); // Adjust the value for more or less rounding
+    lv_obj_set_style_bg_opa(progressObject, LV_OPA_TRANSP, LV_PART_KNOB);
+
+    lv_obj_set_style_bg_color(progressObject, lv_color_hex(0xAAAAAA), LV_PART_KNOB);
+    lv_obj_set_style_bg_color(progressObject, lv_color_hex(0xFFFFFF), LV_PART_INDICATOR);
+    lv_obj_set_style_outline_width(progressObject, 2, LV_PART_INDICATOR);
+    lv_obj_set_style_outline_color(progressObject, lv_color_hex(0xD3D3D3), LV_PART_INDICATOR);
+    lv_slider_set_range(progressObject, 18, 40);
+    lv_slider_set_value(progressObject, speedKtEnd/10, LV_ANIM_OFF);
+    lv_obj_add_event_cb(progressObject, SpeedDegreeStartChanged, LV_EVENT_VALUE_CHANGED, progressObject);
+    lv_obj_align(progressObject, LV_ALIGN_CENTER, 0, lineY + 30);
+
+    lv_obj_t *progressObjectLabel = lv_label_create(parent);
+    lv_obj_set_size(progressObjectLabel, 300, 20);
+    lv_obj_align(progressObjectLabel, LV_ALIGN_CENTER, 0, lineY);
+    lv_obj_set_style_text_align(progressObjectLabel, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_set_style_text_font(progressObjectLabel, &lv_font_montserrat_16, 0);
+    lv_label_set_text(progressObjectLabel, "Speed end");
+    lv_obj_add_style(progressObjectLabel, &style_title, LV_STATE_DEFAULT);
+
+    t_speedEndSpeed = progressObject;
+
+    lineY += 70;
+  }
+
+  if (true)
+  {
+    lv_obj_t *progressObject = lv_slider_create(parent);
+    lv_obj_add_flag(progressObject, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_set_size(progressObject, 300, 35);
+    lv_obj_set_style_radius(progressObject, 3, LV_PART_KNOB); // Adjust the value for more or less rounding
+    lv_obj_set_style_bg_opa(progressObject, LV_OPA_TRANSP, LV_PART_KNOB);
+
+    lv_obj_set_style_bg_color(progressObject, lv_color_hex(0xAAAAAA), LV_PART_KNOB);
+    lv_obj_set_style_bg_color(progressObject, lv_color_hex(0xFFFFFF), LV_PART_INDICATOR);
+    lv_obj_set_style_outline_width(progressObject, 2, LV_PART_INDICATOR);
+    lv_obj_set_style_outline_color(progressObject, lv_color_hex(0xD3D3D3), LV_PART_INDICATOR);
+    lv_slider_set_range(progressObject, 0, 24);
+    lv_slider_set_value(progressObject, speedWhite/15, LV_ANIM_OFF);
+    lv_obj_add_event_cb(progressObject, SpeedDegreeStartChanged, LV_EVENT_VALUE_CHANGED, progressObject);
+    lv_obj_align(progressObject, LV_ALIGN_CENTER, 0, lineY + 30);
+
+    lv_obj_t *progressObjectLabel = lv_label_create(parent);
+    lv_obj_set_size(progressObjectLabel, 300, 20);
+    lv_obj_align(progressObjectLabel, LV_ALIGN_CENTER, 0, lineY);
+    lv_obj_set_style_text_align(progressObjectLabel, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_set_style_text_font(progressObjectLabel, &lv_font_montserrat_16, 0);
+    lv_label_set_text(progressObjectLabel, "White arc start degree");
+    lv_obj_add_style(progressObjectLabel, &style_title, LV_STATE_DEFAULT);
+
+    t_speedWhite = progressObject;
+
+    lineY += 70;
+  }
+  if (true)
+  {
+    lv_obj_t *progressObject = lv_slider_create(parent);
+    lv_obj_add_flag(progressObject, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_set_size(progressObject, 300, 35);
+    lv_obj_set_style_radius(progressObject, 3, LV_PART_KNOB); // Adjust the value for more or less rounding
+    lv_obj_set_style_bg_opa(progressObject, LV_OPA_TRANSP, LV_PART_KNOB);
+
+    lv_obj_set_style_bg_color(progressObject, lv_color_hex(0xAAAAAA), LV_PART_KNOB);
+    lv_obj_set_style_bg_color(progressObject, lv_color_hex(0xFFFFFF), LV_PART_INDICATOR);
+    lv_obj_set_style_outline_width(progressObject, 2, LV_PART_INDICATOR);
+    lv_obj_set_style_outline_color(progressObject, lv_color_hex(0xD3D3D3), LV_PART_INDICATOR);
+    lv_slider_set_range(progressObject, 0, 24);
+    lv_slider_set_value(progressObject, speedGreen/15, LV_ANIM_OFF);
+    lv_obj_add_event_cb(progressObject, SpeedDegreeStartChanged, LV_EVENT_VALUE_CHANGED, progressObject);
+    lv_obj_align(progressObject, LV_ALIGN_CENTER, 0, lineY + 30);
+
+    lv_obj_t *progressObjectLabel = lv_label_create(parent);
+    lv_obj_set_size(progressObjectLabel, 0, 360);
+    lv_obj_align(progressObjectLabel, LV_ALIGN_CENTER, 0, lineY);
+    lv_obj_set_style_text_align(progressObjectLabel, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_set_style_text_font(progressObjectLabel, &lv_font_montserrat_16, 0);
+    lv_label_set_text(progressObjectLabel, "Green arc start degree");
+    lv_obj_add_style(progressObjectLabel, &style_title, LV_STATE_DEFAULT);
+
+    t_speedGreen = progressObject;
+
+    lineY += 70;
+  }
+  if (true)
+  {
+    lv_obj_t *progressObject = lv_slider_create(parent);
+    lv_obj_add_flag(progressObject, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_set_size(progressObject, 300, 35);
+    lv_obj_set_style_radius(progressObject, 3, LV_PART_KNOB); // Adjust the value for more or less rounding
+    lv_obj_set_style_bg_opa(progressObject, LV_OPA_TRANSP, LV_PART_KNOB);
+
+    lv_obj_set_style_bg_color(progressObject, lv_color_hex(0xAAAAAA), LV_PART_KNOB);
+    lv_obj_set_style_bg_color(progressObject, lv_color_hex(0xFFFFFF), LV_PART_INDICATOR);
+    lv_obj_set_style_outline_width(progressObject, 2, LV_PART_INDICATOR);
+    lv_obj_set_style_outline_color(progressObject, lv_color_hex(0xD3D3D3), LV_PART_INDICATOR);
+    lv_slider_set_range(progressObject, 0, 24);
+    lv_slider_set_value(progressObject, speedYellow/15, LV_ANIM_OFF);
+    lv_obj_add_event_cb(progressObject, SpeedDegreeStartChanged, LV_EVENT_VALUE_CHANGED, progressObject);
+    lv_obj_align(progressObject, LV_ALIGN_CENTER, 0, lineY + 30);
+
+    lv_obj_t *progressObjectLabel = lv_label_create(parent);
+    lv_obj_set_size(progressObjectLabel, 300, 20);
+    lv_obj_align(progressObjectLabel, LV_ALIGN_CENTER, 0, lineY);
+    lv_obj_set_style_text_align(progressObjectLabel, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_set_style_text_font(progressObjectLabel, &lv_font_montserrat_16, 0);
+    lv_label_set_text(progressObjectLabel, "Yellow arc start degree");
+    lv_obj_add_style(progressObjectLabel, &style_title, LV_STATE_DEFAULT);
+
+    t_speedYellow = progressObject;
+
+    lineY += 70;
+  }
+  if (true)
+  {
+    lv_obj_t *progressObject = lv_slider_create(parent);
+    lv_obj_add_flag(progressObject, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_set_size(progressObject, 300, 35);
+    lv_obj_set_style_radius(progressObject, 3, LV_PART_KNOB); // Adjust the value for more or less rounding
+    lv_obj_set_style_bg_opa(progressObject, LV_OPA_TRANSP, LV_PART_KNOB);
+
+    lv_obj_set_style_bg_color(progressObject, lv_color_hex(0xAAAAAA), LV_PART_KNOB);
+    lv_obj_set_style_bg_color(progressObject, lv_color_hex(0xFFFFFF), LV_PART_INDICATOR);
+    lv_obj_set_style_outline_width(progressObject, 2, LV_PART_INDICATOR);
+    lv_obj_set_style_outline_color(progressObject, lv_color_hex(0xD3D3D3), LV_PART_INDICATOR);
+    lv_slider_set_range(progressObject, 0, 24);
+    lv_slider_set_value(progressObject, speedRed/15, LV_ANIM_OFF);
+    lv_obj_add_event_cb(progressObject, SpeedDegreeStartChanged, LV_EVENT_VALUE_CHANGED, progressObject);
+    lv_obj_align(progressObject, LV_ALIGN_CENTER, 0, lineY + 30);
+
+    lv_obj_t *progressObjectLabel = lv_label_create(parent);
+    lv_obj_set_size(progressObjectLabel, 300, 20);
+    lv_obj_align(progressObjectLabel, LV_ALIGN_CENTER, 0, lineY);
+    lv_obj_set_style_text_align(progressObjectLabel, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_set_style_text_font(progressObjectLabel, &lv_font_montserrat_16, 0);
+    lv_label_set_text(progressObjectLabel, "Red arc start degree");
+    lv_obj_add_style(progressObjectLabel, &style_title, LV_STATE_DEFAULT);
+
+    t_speedRed = progressObject;
+
+    lineY += 70;
   }
 
   lineY += 10;
-
   if (true)
   {
     lv_obj_t *VersionLabel = lv_label_create(parent);
@@ -2018,12 +2517,21 @@ static void Onboard_create_Setup(lv_obj_t *parent)
   }
 }
 
-void lv_example_dropdown_1(void)
-{
-}
-
 static void Onboard_create_Clock(lv_obj_t *parent)
 {
+
+  // 1.1.1 Branding RB-02 on every screen
+  if (true)
+  {
+    lv_obj_t *label = lv_label_create(parent);
+    lv_obj_set_size(label, 96, 40);
+    lv_obj_align(label, LV_ALIGN_CENTER, 0, -200);
+    lv_obj_set_style_text_font(label, &lv_font_montserrat_16, 0);
+    lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
+    lv_label_set_text(label, "RB 02");
+    lv_obj_add_style(label, &style_title, LV_STATE_DEFAULT);
+  }
+
   if (true)
   {
     lv_obj_t *label = lv_label_create(parent);
@@ -2042,11 +2550,84 @@ static void Onboard_create_Clock(lv_obj_t *parent)
   CreateSingleDigit(parent, &DigitFont100x25, SegmentsA[1], -24, 0);
   CreateSingleDigit(parent, &DigitFont70x20, SegmentsA[2], (DigitFont100x25.header.w / 2 + DigitFont100x25.header.h + 16), 15);
   CreateSingleDigit(parent, &DigitFont70x20, SegmentsA[3], (DigitFont100x25.header.w / 2 + DigitFont100x25.header.h + 24) + (DigitFont70x20.header.w + DigitFont70x20.header.h), 15);
+
+  // 1.1.1 Displays always 3 timers
+  if (true)
+  {
+    lv_obj_t *label = lv_label_create(parent);
+    lv_obj_set_size(label, 200, 40);
+    lv_obj_align(label, LV_ALIGN_CENTER, -95, 165);
+    lv_obj_set_style_text_font(label, &lv_font_montserrat_48, 0);
+    lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
+    lv_label_set_text(label, "TIMER 1");
+    lv_obj_add_style(label, &style_title, LV_STATE_DEFAULT);
+
+    TimerSW = label;
+  }
+  if (true)
+  {
+    lv_obj_t *label = lv_label_create(parent);
+    lv_obj_set_size(label, 200, 40);
+    lv_obj_align(label, LV_ALIGN_CENTER, -95, 150);
+    lv_obj_set_style_text_font(label, &lv_font_montserrat_16, 0);
+    lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
+    lv_label_set_text(label, "TIMER 2");
+    lv_obj_add_style(label, &style_title, LV_STATE_DEFAULT);
+
+    TimerLabelSW = label;
+  }
+  if (true)
+  {
+    lv_obj_t *label = lv_label_create(parent);
+    lv_obj_set_size(label, 200, 40);
+    lv_obj_align(label, LV_ALIGN_CENTER, 95, 165);
+    lv_obj_set_style_text_font(label, &lv_font_montserrat_48, 0);
+    lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
+    lv_label_set_text(label, "--:--");
+    lv_obj_add_style(label, &style_title, LV_STATE_DEFAULT);
+
+    TimerSE = label;
+  }
+  if (true)
+  {
+    lv_obj_t *label = lv_label_create(parent);
+    lv_obj_set_size(label, 200, 40);
+    lv_obj_align(label, LV_ALIGN_CENTER, 95, 150);
+    lv_obj_set_style_text_font(label, &lv_font_montserrat_16, 0);
+    lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
+    lv_label_set_text(label, "TIMER 3");
+    lv_obj_add_style(label, &style_title, LV_STATE_DEFAULT);
+
+    TimerLabelSE = label;
+  }
+
   lv_obj_add_event_cb(parent, speedBgClicked, LV_EVENT_CLICKED, NULL);
 }
 
 static void Onboard_create_AltimeterDigital(lv_obj_t *parent)
 {
+  // 1.1.1 Branding RB-02 on every screen
+  if (true)
+  {
+    lv_obj_t *label = lv_label_create(parent);
+    lv_obj_set_size(label, 96, 40);
+    lv_obj_align(label, LV_ALIGN_CENTER, 0, -200);
+    lv_obj_set_style_text_font(label, &lv_font_montserrat_16, 0);
+    lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
+    lv_label_set_text(label, "RB 02");
+    lv_obj_add_style(label, &style_title, LV_STATE_DEFAULT);
+  }
+  // 1.1.2 Added feet label
+  if (true)
+  {
+    lv_obj_t *label = lv_label_create(parent);
+    lv_obj_set_size(label, 96, 40);
+    lv_obj_align(label, LV_ALIGN_CENTER, 185, 100);
+    lv_obj_set_style_text_font(label, &lv_font_montserrat_16, 0);
+    lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
+    lv_label_set_text(label, "feet");
+    lv_obj_add_style(label, &style_title, LV_STATE_DEFAULT);
+  }
   if (true)
   {
     lv_obj_t *label = lv_label_create(parent);
@@ -2060,11 +2641,12 @@ static void Onboard_create_AltimeterDigital(lv_obj_t *parent)
   if (true)
   {
     lv_obj_t *label = lv_label_create(parent);
-    lv_obj_set_size(label, 300, 40);
+    lv_obj_set_size(label, 440, 40);
     lv_obj_align(label, LV_ALIGN_CENTER, 0, -160 + 48);
     lv_obj_set_style_text_font(label, &lv_font_montserrat_48, 0);
     lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
-    lv_label_set_text(label, "QNH: 1013");
+    // 1.1.2 added mmHg conversion
+    lv_label_set_text(label, "QNH: 1013 - 29.91");
     lv_obj_add_style(label, &style_title, LV_STATE_DEFAULT);
     Screen_Altitude_QNH2 = label;
   }
@@ -2244,14 +2826,26 @@ void draw_arch(lv_obj_t *parent, const lv_img_dsc_t *t, uint16_t degreeStartSlid
     lv_img_set_angle(slice, degree * 10);
   }
 }
-
+#ifdef RB_ENABLE_GPS
 static void Onboard_create_Speed(lv_obj_t *parent)
 {
   // Degree shall be multiples of 7.5
-  draw_arch(parent, &arcWhite, 60, 90);
-  draw_arch(parent, &arcGreen, 105, 210);
-  draw_arch(parent, &arcYellow, 225, 300);
-  draw_arch(parent, &arcRed, 315, 315);
+  draw_arch(parent, &arcWhite, speedWhite, speedGreen - 15);
+  draw_arch(parent, &arcGreen, speedGreen, speedYellow - 15);
+  draw_arch(parent, &arcYellow, speedYellow, speedRed - 15);
+  draw_arch(parent, &arcRed, speedRed, speedRed);
+
+  // 1.1.1 Branding RB-02 on every screen
+  if (true)
+  {
+    lv_obj_t *label = lv_label_create(parent);
+    lv_obj_set_size(label, 96, 40);
+    lv_obj_align(label, LV_ALIGN_CENTER, 0, -200);
+    lv_obj_set_style_text_font(label, &lv_font_montserrat_16, 0);
+    lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
+    lv_label_set_text(label, "RB 02");
+    lv_obj_add_style(label, &style_title, LV_STATE_DEFAULT);
+  }
 
   if (true)
   {
@@ -2260,14 +2854,21 @@ static void Onboard_create_Speed(lv_obj_t *parent)
     lv_obj_align(label, LV_ALIGN_CENTER, 0, 60);
     lv_obj_set_style_text_font(label, &lv_font_montserrat_16, 0);
     lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
-    lv_label_set_text(label, "GPS SPEED KT");
+    if (isKmh == 1)
+    {
+      lv_label_set_text(label, "GPS SPEED KMH");
+    }
+    else
+    {
+      lv_label_set_text(label, "GPS SPEED KT");
+    }
     lv_obj_add_style(label, &style_title, LV_STATE_DEFAULT);
   }
 
-  uint8_t radius = (460 - 96) / 2;
-  uint8_t speedKt = 0;
+  uint8_t radius = (460 - 98) / 2;
+  uint16_t speedKt = 0;
 
-  uint8_t numberOfItems = 10;
+  uint8_t numberOfItems = (degreeEnd - degreeStart) / 30;
 
   uint16_t speedKtIncrement = (speedKtEnd - speedKtStart) / numberOfItems;
   uint16_t degreeIncrement = (degreeEnd - degreeStart) / numberOfItems;
@@ -2290,8 +2891,8 @@ static void Onboard_create_Speed(lv_obj_t *parent)
     lv_obj_set_style_text_font(label, &lv_font_montserrat_48, 0);
     lv_obj_set_style_text_color(label, lv_color_white(), 0);
 
-    char buf[4];
-    snprintf(buf, sizeof(buf), "%d", speedKtStart + (speedKt));
+    char buf[8];
+    snprintf(buf, sizeof(buf), "%u", speedKtStart + (speedKt));
     speedKt += speedKtIncrement;
     lv_label_set_text(label, buf);
   }
@@ -2315,14 +2916,17 @@ static void Onboard_create_Speed(lv_obj_t *parent)
 
   lv_obj_add_event_cb(parent, speedBgClicked, LV_EVENT_CLICKED, NULL);
 }
-
+#endif
 static void Onboard_create_Attitude(lv_obj_t *parent)
 {
 
   lv_obj_set_style_bg_color(parent, lv_color_hex(0x4f3822), LV_PART_ITEMS | LV_STATE_CHECKED);
   lv_obj_set_style_bg_opa(parent, LV_OPA_COVER, LV_PART_ITEMS | LV_STATE_CHECKED);
   Onboard_create_Base(parent, &att_middle_big);
+
   Screen_Attitude_Pitch = Onboard_create_Base(parent, &att_aircraft);
+  // 1.1.1 Aircraft Symbol rotation displacement
+  lv_img_set_pivot(Screen_Attitude_Pitch, att_aircraft.header.w / 2, 0);
   lv_obj_add_event_cb(parent, speedBgClicked, LV_EVENT_CLICKED, NULL);
 
   lv_obj_t *att_img_top = Onboard_create_Base(parent, &att_circle_top_T);
@@ -2342,19 +2946,45 @@ static void Onboard_create_Attitude(lv_obj_t *parent)
 
   Screen_Attitude_RollIndicator = Onboard_create_Base(parent, &att_tri);
   lv_obj_set_pos(Screen_Attitude_RollIndicator, 0, -240 + att_tri.header.h / 2);
+
+
+    // 1.1.1 Branding RB-02 on every screen
+  if (true)
+  {
+    lv_obj_t *label = lv_label_create(parent);
+    lv_obj_set_size(label, 96, 40);
+    lv_obj_align(label, LV_ALIGN_CENTER, 0, -150);
+    lv_obj_set_style_text_font(label, &lv_font_montserrat_16, 0);
+    lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
+    lv_label_set_text(label, "RB 02");
+    lv_obj_add_style(label, &style_title, LV_STATE_DEFAULT);
+  }
 }
 
 static void Onboard_create_Altimeter(lv_obj_t *parent)
 {
   Onboard_create_Base(parent, &RoundAltimeter);
+
+  // 1.1.1 Branding RB-02 on every screen
+  if (true)
+  {
+    lv_obj_t *label = lv_label_create(parent);
+    lv_obj_set_size(label, 96, 40);
+    lv_obj_align(label, LV_ALIGN_CENTER, 0, -130);
+    lv_obj_set_style_text_font(label, &lv_font_montserrat_16, 0);
+    lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
+    lv_label_set_text(label, "RB 02");
+    lv_obj_add_style(label, &style_title, LV_STATE_DEFAULT);
+  }
+
   lv_obj_add_event_cb(parent, speedBgClicked, LV_EVENT_CLICKED, NULL);
 
   Screen_Altitude_QNH = lv_label_create(parent);
   lv_obj_set_size(Screen_Altitude_QNH, 128, 48);
-  lv_obj_align(Screen_Altitude_QNH, LV_ALIGN_CENTER, 184, 0);
+  lv_obj_align(Screen_Altitude_QNH, LV_ALIGN_CENTER, 172, 0);
   lv_obj_set_style_text_font(Screen_Altitude_QNH, &lv_font_montserrat_48, 0);
   char buf[6];
-  snprintf(buf, sizeof(buf), "%03u", QNH % 1000);
+  snprintf(buf, sizeof(buf), "%03u", QNH);
   lv_label_set_text(Screen_Altitude_QNH, buf);
 
   Screen_Altitude_Miles = lv_img_create(parent);
@@ -2391,11 +3021,23 @@ static void Onboard_create_TurnSlip(lv_obj_t *parent)
   lv_obj_align(Screen_TurnSlip_Obj_Turn, LV_ALIGN_CENTER, 0, 0);
   Screen_TurnSlip_Obj_Ball = _screenBall;
 }
-
+#ifdef RB_ENABLE_GPS
 static void Onboard_create_Track(lv_obj_t *parent)
 {
   Screen_Gyro_Gear = Onboard_create_Base(parent, &RoundGyro);
   Onboard_create_Base(parent, &RoundGyroHeading);
+
+  // 1.1.1 Branding RB-02 on every screen
+  if (true)
+  {
+    lv_obj_t *label = lv_label_create(parent);
+    lv_obj_set_size(label, 96, 40);
+    lv_obj_align(label, LV_ALIGN_CENTER, 0, -200);
+    lv_obj_set_style_text_font(label, &lv_font_montserrat_16, 0);
+    lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
+    lv_label_set_text(label, "RB 02");
+    lv_obj_add_style(label, &style_title, LV_STATE_DEFAULT);
+  }
 
   if (true)
   {
@@ -2421,10 +3063,24 @@ static void Onboard_create_Track(lv_obj_t *parent)
   lv_label_set_text(Screen_Track_TrackText, buf);
   lv_obj_add_event_cb(parent, speedBgClicked, LV_EVENT_CLICKED, NULL);
 }
-
+#endif
 static void Onboard_create_Variometer(lv_obj_t *parent)
 {
+
   Onboard_create_Base(parent, &RoundVariometer);
+
+  // 1.1.1 Branding RB-02 on every screen
+  if (true)
+  {
+    lv_obj_t *label = lv_label_create(parent);
+    lv_obj_set_size(label, 96, 40);
+    lv_obj_align(label, LV_ALIGN_CENTER, 0, -200);
+    lv_obj_set_style_text_font(label, &lv_font_montserrat_16, 0);
+    lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
+    lv_label_set_text(label, "RB 02");
+    lv_obj_add_style(label, &style_title, LV_STATE_DEFAULT);
+  }
+
   lv_obj_add_event_cb(parent, speedBgClicked, LV_EVENT_CLICKED, NULL);
 
   Screen_Variometer_Cents = lv_img_create(parent);
@@ -2436,6 +3092,19 @@ static void Onboard_create_Variometer(lv_obj_t *parent)
 static void Onboard_create_GMeter(lv_obj_t *parent)
 {
   Onboard_create_Base(parent, &GMeter);
+
+  // 1.1.1 Branding RB-02 on every screen
+  if (true)
+  {
+    lv_obj_t *label = lv_label_create(parent);
+    lv_obj_set_size(label, 96, 40);
+    lv_obj_align(label, LV_ALIGN_CENTER, 0, -200);
+    lv_obj_set_style_text_font(label, &lv_font_montserrat_16, 0);
+    lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
+    lv_label_set_text(label, "RB 02");
+    lv_obj_add_style(label, &style_title, LV_STATE_DEFAULT);
+  }
+
   lv_obj_add_event_cb(parent, speedBgClicked, LV_EVENT_CLICKED, NULL);
 
   Screen_GMeter_BallMax = lv_obj_create(parent);
@@ -2639,16 +3308,16 @@ void update_AltimeterDigital_lvgl_tick(lv_timer_t *t)
   snprintf(buf, sizeof(buf), "%+ld", Variometer);
   lv_label_set_text(Screen_Altitude_Variometer2, buf);
 
-  snprintf(buf, sizeof(buf), "%.02f", bmp280Pressure / 10.0);
+  snprintf(buf, sizeof(buf), "%.02f", bmp280Pressure / 100.0);
   lv_label_set_text(Screen_Altitude_Pressure, buf);
 }
 
-void update_Clock_lvgl_tick(lv_timer_t *t)
+uint32_t timerDiffByIndex(int st)
 {
 
   datetime_t datetimeTimer = {0};
 
-  switch (selectedTimer)
+  switch (st)
   {
   case 0:
     datetimeTimer = datetimeTimer1;
@@ -2668,10 +3337,47 @@ void update_Clock_lvgl_tick(lv_timer_t *t)
   uint32_t epochB = datetimeTimer.second + 60 * datetimeTimer.minute + 60 * 60 * datetimeTimer.hour;
   uint32_t diff = epochA - epochB;
 
+  return diff;
+}
+
+void update_Clock_lvgl_tick(lv_timer_t *t)
+{
+  uint32_t diff = timerDiffByIndex(selectedTimer);
+
   turnOnOffDigits(SegmentsA[0], ((diff / 60) / 10) % 10);
   turnOnOffDigits(SegmentsA[1], ((diff / 60)) % 10);
   turnOnOffDigits(SegmentsA[2], ((diff % 60) / 10) % 10);
   turnOnOffDigits(SegmentsA[3], (diff % 60) % 10);
+  char buf[20];
+  uint32_t diffSW = 0;
+  uint32_t diffSE = 0;
+  switch (selectedTimer)
+  {
+  case 0:
+    diffSW = timerDiffByIndex(1);
+    sprintf(buf, "%02lu:%02lu", (diffSW / 60), (diffSW % 60));
+    lv_label_set_text(TimerSW, buf);
+    diffSE = timerDiffByIndex(2);
+    sprintf(buf, "%02lu:%02lu", (diffSE / 60), (diffSE % 60));
+    lv_label_set_text(TimerSE, buf);
+    break;
+  case 1:
+    diffSW = timerDiffByIndex(0);
+    sprintf(buf, "%02lu:%02lu", (diffSW / 60), (diffSW % 60));
+    lv_label_set_text(TimerSW, buf);
+    diffSE = timerDiffByIndex(2);
+    sprintf(buf, "%02lu:%02lu", (diffSE / 60), (diffSE % 60));
+    lv_label_set_text(TimerSE, buf);
+    break;
+  case 2:
+    diffSW = timerDiffByIndex(0);
+    sprintf(buf, "%02lu:%02lu", (diffSW / 60), (diffSW % 60));
+    lv_label_set_text(TimerSW, buf);
+    diffSE = timerDiffByIndex(1);
+    sprintf(buf, "%02lu:%02lu", (diffSE / 60), (diffSE % 60));
+    lv_label_set_text(TimerSE, buf);
+    break;
+  }
 }
 
 void update_GMeter_lvgl_tick(lv_timer_t *t)
