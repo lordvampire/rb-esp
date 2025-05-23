@@ -8,6 +8,7 @@
  * 02 -> Display 2.8" with SixPack
  * 03 -> Autopilot, ADSB, Radio, Flight Computer
  *
+ * Starting from version 1.1.3 both of displays are supported: 2.8 and 2.1
  *
  * RB02.c
  * Implementation of RoastBeef PN 02 The basic six pack version
@@ -37,9 +38,12 @@
  */
 #include "RB02.h"
 // 1.1.2 Version is here
-#define RB_VERSION "1.1.2"
+#define RB_VERSION "1.1.3"
 // 1.1.1 Remove tabs with GPS if not installed
-//#define RB_ENABLE_GPS 1
+#define RB_ENABLE_GPS 1
+#define ENABLE_DEMO_SCREENS 1
+// 1.1.3 Supports for 2.1 and 2.8 displays
+#define RB_02_DISPLAY_SIZE 28
 
 // Images pre-loaded
 #ifdef ENABLE_DEMO_SCREENS
@@ -83,8 +87,8 @@
 #include "arcWhite.c"
 
 // External dependencies
-#include "LVGL_Example.h"
-
+#include "nvs_flash.h" 
+#include "esp_mac.h"
 extern uint8_t LCD_Backlight;
 extern IMUdata AccelFilteredMax;
 extern IMUdata GyroBias;
@@ -92,8 +96,6 @@ extern lv_coord_t TouchPadLastX;
 extern lv_coord_t TouchPadLastY;
 extern float AttitudeBalanceAlpha;
 extern float FilterMoltiplier;
-extern lv_style_t style_text_muted;
-extern lv_style_t style_title;
 extern float GFactor;
 extern float GFactorMax;
 extern float GFactorMin;
@@ -109,11 +111,6 @@ extern uint8_t GFactorDirty;
 #define GPS_MAX_SATELLITES_IN_USE (12)
 #define GPS_MAX_SATELLITES_IN_VIEW (16)
 
-/**
- * @brief Declare of NMEA Parser Event base
- *
- */
-ESP_EVENT_DECLARE_BASE(ESP_NMEA_EVENT);
 
 /**
  * @brief GPS fix type
@@ -228,7 +225,6 @@ static void Onboard_create_Altimeter(lv_obj_t *parent);
 static void Onboard_create_AltimeterDigital(lv_obj_t *parent);
 static void Onboard_create_TurnSlip(lv_obj_t *parent);
 static void Onboard_create_Clock(lv_obj_t *parent);
-static void Onboard_create_Setup(lv_obj_t *parent);
 static void Onboard_create_Track(lv_obj_t *parent);
 static void Onboard_create_Variometer(lv_obj_t *parent);
 static void Onboard_create_GMeter(lv_obj_t *parent);
@@ -293,7 +289,7 @@ typedef enum
   RB02_TAB_DEV
 } tabs;
 
-static lv_obj_t *kb;
+
 lv_obj_t *uartDropDown = NULL;
 lv_obj_t *kmhDropDown = NULL;
 lv_obj_t *SettingStatus0 = NULL;
@@ -301,7 +297,7 @@ lv_obj_t *SettingStatus1 = NULL;
 lv_obj_t *SettingStatus2 = NULL;
 lv_obj_t *SettingStatus3 = NULL;
 lv_obj_t *SettingStatus4UART = NULL;
-
+lv_style_t style_title;
 lv_obj_t *SettingLabelFilter = NULL;
 
 lv_obj_t *SettingAttitudeCompensation = NULL;
@@ -369,7 +365,7 @@ lv_obj_t *t_speedWhite = NULL;
 lv_obj_t *t_speedGreen = NULL;
 lv_obj_t *t_speedYellow = NULL;
 lv_obj_t *t_speedRed = NULL;
-
+uint64_t _chipmacid = 0LL;
 uint8_t workflow = 0;
 int32_t bmp280override = 0;
 int32_t bmp280Calibration[12];
@@ -419,7 +415,7 @@ void RB02_Example1(void)
   ApplyCoding();
   nvsRestoreGMeter();
   LCD_Backlight = 0;
-  LVGL_Backlight_adjustment(LCD_Backlight);
+  Set_Backlight(LCD_Backlight);
 
   lv_style_init(&style_title);
   // lv_style_set_text_font(&style_title, font_large);
@@ -475,6 +471,13 @@ void RB02_Example1(void)
   Onboard_create_Variometer(t6);
   Onboard_create_GMeter(t7);
   Onboard_create_Clock(t8);
+  // 1.1.3 Display unique serial number for device tracking
+  esp_efuse_mac_get_default((uint8_t *)(&_chipmacid));
+  int8_t hasGPS = 0;
+  #ifdef RB_ENABLE_GPS
+  hasGPS = 1;
+  #endif
+  printf("$RB,02,%d,%s,%d,%llX\n",RB_02_DISPLAY_SIZE,RB_VERSION,hasGPS,_chipmacid);
   Onboard_create_Setup(t9);
   // Onboard_create(t10);
 
@@ -504,6 +507,18 @@ void RB02_Example1(void)
   {
     lv_tabview_set_act(tv, StartupPage, LV_ANIM_OFF);
   }
+
+  // 1.1.3 Disable manual scroll
+  lv_obj_clear_flag(tv, LV_OBJ_FLAG_SCROLLABLE);
+  //lv_tabview_set_sliding(tv, false);
+  /*
+  lv_tabview_t *tabview = (lv_tabview_t *)tv;
+  for (uint16_t cur = 0; cur < tabview->tab_cnt - 2; cur++)
+  {
+
+    lv_obj_clear_flag(t1, LV_OBJ_FLAG_SCROLLABLE);
+  }
+  */
 }
 
 void nmea_RMC_UpdatedValueFor(uint8_t csvCounter, int32_t finalNumber, uint8_t decimalCounter)
@@ -513,103 +528,6 @@ void nmea_RMC_UpdatedValueFor(uint8_t csvCounter, int32_t finalNumber, uint8_t d
   {
     conversionValue = conversionValue / 10.0;
   }
-
-  /*
-  0=-12.00
-  0=-97.00
-  0=-938.00
-  0=-9346.00
-  0=-93431.00
-  0=-934291.00
-  1=-9342910.00
-  1=-93429088.00
-  1=-934290880.00
-  1=-752974528.00
-  1=1060189632.00
-  1=2011961600.00
-  1=-135522112.00
-  1=-6673091.00
-  2=19168436.00
-  3=19885676.00
-  3=-15891594.00
-  3=12882754.00
-  3=-21477.37
-  3=-21477.37
-  3=-21477.37
-  3=21472.30
-  3=-2.53
-  3=-2.53
-  4=-25.32
-  5=176.26
-  5=44.63
-  5=16.77
-  5=167.68
-  5=-41.18
-  5=1.77
-  5=1.77
-  5=0.05
-  5=0.01
-  5=-0.00
-  6=0.00
-  7=0.00
-  7=-0.00
-  7=0.00
-  7=0.00
-  9=0.00
-  9=-0.00
-  9=-0.00
-  9=-0.00
-  9=0.00
-  9=0.00
-  12=0.00
-  12=-0.00
-  12=0.00
-  12=-0.00
-  0=-12.00
-  0=-97.00
-  0=-938.00
-  0=-9346.00
-  0=-93431.00
-  0=-934291.00
-  1=-9342910.00
-  1=-93429088.00
-  1=-934290880.00
-  1=-752974528.00
-  1=1060189632.00
-  1=2011961600.00
-  1=-135522112.00
-  1=-6673090.50
-  2=19168438.00
-  3=19885698.00
-  3=-15891394.00
-  3=12884754.00
-  3=-1477.37
-  3=-1477.37
-  3=-1477.37
-  3=-1477.37
-  3=-1477.37
-  3=-188.88
-  4=-170.80
-  5=9.99
-  5=99.92
-  5=140.17
-  5=113.26
-  5=-155.91
-  5=15.88
-  5=-1.30
-  5=-0.01
-  5=-0.01
-  5=0.00
-  6=-0.00
-  7=0.00
-  7=-0.00
-  7=0.00
-  7=0.00
-  9=-0.00
-  9=0.00
-
-  */
-
   switch (csvCounter)
   {
   case 0: // $GPRMC
@@ -1043,7 +961,8 @@ void update_TurnSlip_lvgl_tick(lv_timer_t *t)
   float range_X = 100;
   float range_Y = 16;
   lv_obj_set_pos(Screen_TurnSlip_Obj_Ball, -range_X * fay, 88 - abs((int)(range_Y * fay)));
-  lv_img_set_angle(Screen_TurnSlip_Obj_Turn, -10.0 * GyroFiltered.x);
+  // 1.1.3 Bugfix: Bias was not applied to Turn & Slip
+  lv_img_set_angle(Screen_TurnSlip_Obj_Turn, -10.0 * (GyroFiltered.x + GyroBias.x));
 }
 
 void update_TurnSlip2_lvgl_tick(lv_timer_t *t)
@@ -1245,8 +1164,9 @@ void update_Speed_lvgl_tick(lv_timer_t *t)
     }
       */
     int32_t speedAngle = degreeStart * 10 + (ratioDK * speedCapped);
-    if(speedAngle<0){
-      speedAngle=0;
+    if (speedAngle < 0)
+    {
+      speedAngle = 0;
     }
 
     lv_img_set_angle(Screen_Speed_SpeedTick, speedAngle + 900);
@@ -1297,7 +1217,7 @@ void uartApplyRates()
     uart_param_config(1, &uart_config);
   }
 }
-#endif 
+#endif
 void bmp280Setup()
 {
   uint8_t bmp280Control[1] = {0x57};
@@ -1368,7 +1288,7 @@ void rb_increase_lvgl_tick(lv_timer_t *t)
     case 7:
       readCalibration();
       LCD_Backlight = 1;
-      LVGL_Backlight_adjustment(LCD_Backlight);
+      Set_Backlight(LCD_Backlight);
       break;
     case 8:
       GyroBiasAcquire[0] = GyroFiltered;
@@ -1383,7 +1303,7 @@ void rb_increase_lvgl_tick(lv_timer_t *t)
       stopwatch = datetime;
       break;
     case 91:
-    #ifdef RB_ENABLE_GPS
+#ifdef RB_ENABLE_GPS
       uartApplyRates();
       switch (GpsSpeed0ForDisable)
       {
@@ -1406,9 +1326,9 @@ void rb_increase_lvgl_tick(lv_timer_t *t)
         lv_dropdown_set_selected(uartDropDown, 5);
         break;
       }
-    #else
-    GpsSpeed0ForDisable = 0;
-    #endif
+#else
+      GpsSpeed0ForDisable = 0;
+#endif
       break;
     case 100:
 
@@ -1419,7 +1339,7 @@ void rb_increase_lvgl_tick(lv_timer_t *t)
       lv_obj_add_flag(Loading_slider, LV_OBJ_FLAG_HIDDEN);
 
       LCD_Backlight = 100;
-      LVGL_Backlight_adjustment(LCD_Backlight);
+      Set_Backlight(LCD_Backlight);
       break;
     default:
       break;
@@ -1514,24 +1434,45 @@ void rb_increase_lvgl_tick(lv_timer_t *t)
   break;
   }
 }
-/*
-44
-44
-20
-26
-27
-21
-22
-23
-44
-44
-26
-27
-24
-25
-33
 
-*/
+static void mbox1_timer_reset(lv_event_t *e)
+{
+
+  lv_event_code_t code = lv_event_get_code(e);
+  lv_obj_t *msgbox = lv_event_get_current_target(e);
+
+  if (code == LV_EVENT_VALUE_CHANGED)
+  {
+    const char *txt = lv_msgbox_get_active_btn_text(msgbox);
+    if (txt)
+    {
+      if (strcmp("RESTART", txt) == 0)
+      {
+        switch (selectedTimer)
+        {
+        case 0:
+          datetimeTimer1 = datetime;
+          break;
+        case 1:
+          datetimeTimer2 = datetime;
+          break;
+        case 2:
+          datetimeTimer3 = datetime;
+          break;
+        }
+        update_Clock_lvgl_tick(NULL);
+      }
+      lv_msgbox_close(msgbox);
+    }
+  }
+
+  if (code == LV_EVENT_DELETE)
+  {
+    printf("Popup closed\n");
+    mbox1 = NULL;
+  }
+}
+
 static void mbox1_event_cb(lv_event_t *e)
 {
 
@@ -1612,6 +1553,19 @@ void lv_gmeter_reset_msgbox(void)
   lv_obj_center(mbox1);
 }
 
+// 1.1.3 Popup for timer restart
+void lv_timer_restart_msgbox(void)
+{
+  if (mbox1 != NULL)
+    return;
+  static const char *btns[] = {"RESTART", "CANCEL", ""};
+
+  mbox1 = lv_msgbox_create(NULL, "Timers", "Would you like to restart the timer?", btns, true);
+  lv_obj_set_style_text_font(mbox1, &lv_font_montserrat_16, 0);
+  lv_obj_add_event_cb(mbox1, mbox1_timer_reset, LV_EVENT_ALL, mbox1);
+  lv_obj_center(mbox1);
+}
+
 static void actionInTab(touchLocation location)
 {
   switch (((lv_tabview_t *)tv)->tab_cur)
@@ -1633,8 +1587,8 @@ static void actionInTab(touchLocation location)
     char buf[25];
     snprintf(buf, sizeof(buf), "%03u", QNH);
     lv_label_set_text(Screen_Altitude_QNH, buf);
-        // 1.1.2 added mmHg conversion
-    snprintf(buf, sizeof(buf), "QNH: %u %.02f", QNH, ((float)QNH)/33.8639);
+    // 1.1.2 added mmHg conversion
+    snprintf(buf, sizeof(buf), "QNH: %u %.02f", QNH, ((float)QNH) / 33.8639);
     lv_label_set_text(Screen_Altitude_QNH2, buf);
     snprintf(buf, sizeof(buf), "%+ld", Variometer);
     lv_label_set_text(Screen_Altitude_Variometer2, buf);
@@ -1655,7 +1609,7 @@ static void actionInTab(touchLocation location)
       {
         selectedTimer = 0;
       }
-      char buf[8];
+      char buf[12];
       sprintf(buf, "TIMER %u", selectedTimer + 1);
       lv_label_set_text(TimerLabelTop, buf);
       update_Clock_lvgl_tick(NULL);
@@ -1686,20 +1640,8 @@ static void actionInTab(touchLocation location)
     case RB02_TOUCH_S:
       break;
     case RB02_TOUCH_CENTER:
-
-      switch (selectedTimer)
-      {
-      case 0:
-        datetimeTimer1 = datetime;
-        break;
-      case 1:
-        datetimeTimer2 = datetime;
-        break;
-      case 2:
-        datetimeTimer3 = datetime;
-        break;
-      }
-      update_Clock_lvgl_tick(NULL);
+      // 1.1.3 Restart timer moved to menu
+      lv_timer_restart_msgbox();
       break;
     default:
       break;
@@ -1833,14 +1775,14 @@ static void AltimeterOverrideChanged(lv_event_t *e)
 
 static void SpeedDegreeStartChanged(lv_event_t *e)
 {
-  uint16_t new_Start = 15*lv_slider_get_value(t_speedStart);
-  uint16_t new_End = 15*lv_slider_get_value(t_speedEnd);
-  uint16_t new_StartSpeed = 10*lv_slider_get_value(t_speedStartSpeed);
-  uint16_t new_EndSpeed = 10*lv_slider_get_value(t_speedEndSpeed);
-  uint16_t new_White = 15*lv_slider_get_value(t_speedWhite);
-  uint16_t new_Green = 15*lv_slider_get_value(t_speedGreen);
-  uint16_t new_Yellow = 15*lv_slider_get_value(t_speedYellow);
-  uint16_t new_Red = 15*lv_slider_get_value(t_speedRed);
+  uint16_t new_Start = 15 * lv_slider_get_value(t_speedStart);
+  uint16_t new_End = 15 * lv_slider_get_value(t_speedEnd);
+  uint16_t new_StartSpeed = 10 * lv_slider_get_value(t_speedStartSpeed);
+  uint16_t new_EndSpeed = 10 * lv_slider_get_value(t_speedEndSpeed);
+  uint16_t new_White = 15 * lv_slider_get_value(t_speedWhite);
+  uint16_t new_Green = 15 * lv_slider_get_value(t_speedGreen);
+  uint16_t new_Yellow = 15 * lv_slider_get_value(t_speedYellow);
+  uint16_t new_Red = 15 * lv_slider_get_value(t_speedRed);
 
   degreeStart = new_Start;
   degreeEnd = new_End;
@@ -1877,7 +1819,7 @@ static void Backlight_adjustment_event_Changed(lv_event_t *e)
 {
   uint8_t Backlight = lv_slider_get_value(lv_event_get_target(e));
   printf("Changed Backlight ratio from: %d to: %d\n", LCD_Backlight, Backlight);
-  LVGL_Backlight_adjustment(Backlight);
+  Set_Backlight(Backlight);
   LCD_Backlight = Backlight;
 }
 static void GMeterMaxChanged(lv_event_t *e)
@@ -1959,6 +1901,20 @@ static void Onboard_create_Setup(lv_obj_t *parent)
     lv_obj_set_style_text_align(VersionLabel, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_set_style_text_font(VersionLabel, &lv_font_montserrat_16, 0);
     lv_label_set_text(VersionLabel, "Version " RB_VERSION);
+    lv_obj_add_style(VersionLabel, &style_title, LV_STATE_DEFAULT);
+    lineY += 40;
+  }
+
+  if (true)
+  {
+    lv_obj_t *VersionLabel = lv_label_create(parent);
+    lv_obj_set_size(VersionLabel, 200, 20);
+    lv_obj_align(VersionLabel, LV_ALIGN_CENTER, 0, lineY);
+    lv_obj_set_style_text_align(VersionLabel, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_set_style_text_font(VersionLabel, &lv_font_montserrat_16, 0);
+    char hwstring[20];
+    snprintf(hwstring, 20, "%llX", _chipmacid);
+    lv_label_set_text(VersionLabel, hwstring);
     lv_obj_add_style(VersionLabel, &style_title, LV_STATE_DEFAULT);
     lineY += 40;
   }
@@ -2216,7 +2172,7 @@ static void Onboard_create_Setup(lv_obj_t *parent)
     lineY += 30;
   }
 #endif
-    if (true)
+  if (true)
   {
     lv_obj_t *label = lv_label_create(parent);
     lv_obj_set_size(label, 400, 20);
@@ -2228,7 +2184,6 @@ static void Onboard_create_Setup(lv_obj_t *parent)
 
     lineY += 25;
   }
-
 
   if (true)
   {
@@ -2243,7 +2198,6 @@ static void Onboard_create_Setup(lv_obj_t *parent)
     lv_dropdown_set_selected(kmhDropDown, isKmh);
     lineY += 30;
   }
-
 
   if (true)
   {
@@ -2281,7 +2235,7 @@ static void Onboard_create_Setup(lv_obj_t *parent)
     lv_obj_set_style_outline_width(progressObject, 2, LV_PART_INDICATOR);
     lv_obj_set_style_outline_color(progressObject, lv_color_hex(0xD3D3D3), LV_PART_INDICATOR);
     lv_slider_set_range(progressObject, 0, 23);
-    lv_slider_set_value(progressObject, degreeStart/15, LV_ANIM_OFF);
+    lv_slider_set_value(progressObject, degreeStart / 15, LV_ANIM_OFF);
     lv_obj_add_event_cb(progressObject, SpeedDegreeStartChanged, LV_EVENT_VALUE_CHANGED, progressObject);
     lv_obj_align(progressObject, LV_ALIGN_CENTER, 0, lineY + 30);
 
@@ -2310,7 +2264,7 @@ static void Onboard_create_Setup(lv_obj_t *parent)
     lv_obj_set_style_outline_width(progressObject, 2, LV_PART_INDICATOR);
     lv_obj_set_style_outline_color(progressObject, lv_color_hex(0xD3D3D3), LV_PART_INDICATOR);
     lv_slider_set_range(progressObject, 1, 24);
-    lv_slider_set_value(progressObject, degreeEnd/15, LV_ANIM_OFF);
+    lv_slider_set_value(progressObject, degreeEnd / 15, LV_ANIM_OFF);
     lv_obj_add_event_cb(progressObject, SpeedDegreeStartChanged, LV_EVENT_VALUE_CHANGED, progressObject);
     lv_obj_align(progressObject, LV_ALIGN_CENTER, 0, lineY + 30);
 
@@ -2340,7 +2294,7 @@ static void Onboard_create_Setup(lv_obj_t *parent)
     lv_obj_set_style_outline_width(progressObject, 2, LV_PART_INDICATOR);
     lv_obj_set_style_outline_color(progressObject, lv_color_hex(0xD3D3D3), LV_PART_INDICATOR);
     lv_slider_set_range(progressObject, 0, 10);
-    lv_slider_set_value(progressObject, speedKtStart/10, LV_ANIM_OFF);
+    lv_slider_set_value(progressObject, speedKtStart / 10, LV_ANIM_OFF);
     lv_obj_add_event_cb(progressObject, SpeedDegreeStartChanged, LV_EVENT_VALUE_CHANGED, progressObject);
     lv_obj_align(progressObject, LV_ALIGN_CENTER, 0, lineY + 30);
 
@@ -2369,7 +2323,7 @@ static void Onboard_create_Setup(lv_obj_t *parent)
     lv_obj_set_style_outline_width(progressObject, 2, LV_PART_INDICATOR);
     lv_obj_set_style_outline_color(progressObject, lv_color_hex(0xD3D3D3), LV_PART_INDICATOR);
     lv_slider_set_range(progressObject, 18, 40);
-    lv_slider_set_value(progressObject, speedKtEnd/10, LV_ANIM_OFF);
+    lv_slider_set_value(progressObject, speedKtEnd / 10, LV_ANIM_OFF);
     lv_obj_add_event_cb(progressObject, SpeedDegreeStartChanged, LV_EVENT_VALUE_CHANGED, progressObject);
     lv_obj_align(progressObject, LV_ALIGN_CENTER, 0, lineY + 30);
 
@@ -2399,7 +2353,7 @@ static void Onboard_create_Setup(lv_obj_t *parent)
     lv_obj_set_style_outline_width(progressObject, 2, LV_PART_INDICATOR);
     lv_obj_set_style_outline_color(progressObject, lv_color_hex(0xD3D3D3), LV_PART_INDICATOR);
     lv_slider_set_range(progressObject, 0, 24);
-    lv_slider_set_value(progressObject, speedWhite/15, LV_ANIM_OFF);
+    lv_slider_set_value(progressObject, speedWhite / 15, LV_ANIM_OFF);
     lv_obj_add_event_cb(progressObject, SpeedDegreeStartChanged, LV_EVENT_VALUE_CHANGED, progressObject);
     lv_obj_align(progressObject, LV_ALIGN_CENTER, 0, lineY + 30);
 
@@ -2428,7 +2382,7 @@ static void Onboard_create_Setup(lv_obj_t *parent)
     lv_obj_set_style_outline_width(progressObject, 2, LV_PART_INDICATOR);
     lv_obj_set_style_outline_color(progressObject, lv_color_hex(0xD3D3D3), LV_PART_INDICATOR);
     lv_slider_set_range(progressObject, 0, 24);
-    lv_slider_set_value(progressObject, speedGreen/15, LV_ANIM_OFF);
+    lv_slider_set_value(progressObject, speedGreen / 15, LV_ANIM_OFF);
     lv_obj_add_event_cb(progressObject, SpeedDegreeStartChanged, LV_EVENT_VALUE_CHANGED, progressObject);
     lv_obj_align(progressObject, LV_ALIGN_CENTER, 0, lineY + 30);
 
@@ -2457,7 +2411,7 @@ static void Onboard_create_Setup(lv_obj_t *parent)
     lv_obj_set_style_outline_width(progressObject, 2, LV_PART_INDICATOR);
     lv_obj_set_style_outline_color(progressObject, lv_color_hex(0xD3D3D3), LV_PART_INDICATOR);
     lv_slider_set_range(progressObject, 0, 24);
-    lv_slider_set_value(progressObject, speedYellow/15, LV_ANIM_OFF);
+    lv_slider_set_value(progressObject, speedYellow / 15, LV_ANIM_OFF);
     lv_obj_add_event_cb(progressObject, SpeedDegreeStartChanged, LV_EVENT_VALUE_CHANGED, progressObject);
     lv_obj_align(progressObject, LV_ALIGN_CENTER, 0, lineY + 30);
 
@@ -2486,7 +2440,7 @@ static void Onboard_create_Setup(lv_obj_t *parent)
     lv_obj_set_style_outline_width(progressObject, 2, LV_PART_INDICATOR);
     lv_obj_set_style_outline_color(progressObject, lv_color_hex(0xD3D3D3), LV_PART_INDICATOR);
     lv_slider_set_range(progressObject, 0, 24);
-    lv_slider_set_value(progressObject, speedRed/15, LV_ANIM_OFF);
+    lv_slider_set_value(progressObject, speedRed / 15, LV_ANIM_OFF);
     lv_obj_add_event_cb(progressObject, SpeedDegreeStartChanged, LV_EVENT_VALUE_CHANGED, progressObject);
     lv_obj_align(progressObject, LV_ALIGN_CENTER, 0, lineY + 30);
 
@@ -2947,8 +2901,7 @@ static void Onboard_create_Attitude(lv_obj_t *parent)
   Screen_Attitude_RollIndicator = Onboard_create_Base(parent, &att_tri);
   lv_obj_set_pos(Screen_Attitude_RollIndicator, 0, -240 + att_tri.header.h / 2);
 
-
-    // 1.1.1 Branding RB-02 on every screen
+  // 1.1.1 Branding RB-02 on every screen
   if (true)
   {
     lv_obj_t *label = lv_label_create(parent);

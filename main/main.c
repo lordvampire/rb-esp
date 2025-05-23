@@ -7,12 +7,18 @@
 #include "PCF85063.h"
 #include "QMI8658.h"
 #include "ST7701S.h"
+// ESP32-S3-2.8C
 #include "GT911.h"
+// ESP32-S3-2.1C
+// #include "CST820.h"
 #include "SD_MMC.h"
 #include "LVGL_Driver.h"
-#include "LVGL_Example.h"
+#include "lvgl.h"
+#include "demos/lv_demos.h"
+#include "Buzzer.h"
+#include "BAT_Driver.h"
 #include "RB02.h"
-
+#include "nvs_flash.h" 
 #include "BAT_Driver.h"
 
 // 1.0.9 Install in the loop BMP280
