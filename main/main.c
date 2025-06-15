@@ -18,32 +18,35 @@
 #include "Buzzer.h"
 #include "BAT_Driver.h"
 #include "RB02.h"
-#include "nvs_flash.h" 
+#include "nvs_flash.h"
 #include "BAT_Driver.h"
 
+// 1.1.9
+uint8_t DriverLoopMilliseconds = 50;
+
 // 1.0.9 Install in the loop BMP280
-void Get_BMP280(void); // Declaration
+void Get_BMP280(void);   // Declaration
 extern uint8_t workflow; // When sensor is ready (After Calibration)
 void Driver_Loop(void *parameter)
 {
     int loopThreshold = 10; // Delay the polling of certain sensors
-    while(1)
+    while (1)
     {
         QMI8658_Loop();
         RTC_Loop();
         // Delay the polling of certain sensors
-        if(loopThreshold==0)
+        if (loopThreshold == 0)
         {
-            loopThreshold = 10;
+            loopThreshold = 100;
             // When sensor is ready (After Calibration)
-            if(workflow>100)
+            if (workflow > 100)
             {
-        BAT_Get_Volts();
+                BAT_Get_Volts();
                 Get_BMP280();
             }
         }
         loopThreshold--;
-        vTaskDelay(pdMS_TO_TICKS(100));
+        vTaskDelay(pdMS_TO_TICKS(10+DriverLoopMilliseconds));
     }
     vTaskDelete(NULL);
 }
@@ -54,19 +57,18 @@ void Driver_Init(void)
     I2C_Init();
     PCF85063_Init();
     QMI8658_Init();
-    EXIO_Init();                    // Example Initialize EXIO
+    EXIO_Init(); // Example Initialize EXIO
     xTaskCreatePinnedToCore(
-        Driver_Loop, 
+        Driver_Loop,
         "Other Driver task",
-        4096, 
-        NULL, 
-        3, 
-        NULL, 
+        4096,
+        NULL,
+        3,
+        NULL,
         0);
 }
 void app_main(void)
-{   
-
+{
 
     // Initialize NVS.
     esp_err_t ret = nvs_flash_init();
@@ -76,8 +78,7 @@ void app_main(void)
         ret = nvs_flash_init();
     }
 
-
-    //Wireless_Init();
+    // Wireless_Init();
     Driver_Init();
 
     // 1.0.9
@@ -88,10 +89,10 @@ void app_main(void)
 
     LCD_Init();
     Touch_Init();
-    //SD_Init();
+    // SD_Init();
     LVGL_Init();
-/********************* Demo *********************/
-    //Lvgl_Example1();
+    /********************* Demo *********************/
+    // Lvgl_Example1();
     RB02_Example1();
     // lv_demo_widgets();
     // lv_demo_keypad_encoder();
@@ -99,7 +100,8 @@ void app_main(void)
     // lv_demo_stress();
     // lv_demo_music();
 
-    while (1) {
+    while (1)
+    {
         // raise the task priority of LVGL and/or reduce the handler period can improve the performance
         vTaskDelay(pdMS_TO_TICKS(10));
         // The task running lv_timer_handler should have lower priority than that running `lv_tick_inc`
