@@ -1,7 +1,8 @@
 #include "QMI8658.h"
 #include "lvgl.h"
 #include "madgwick.h"
-
+#include "nvs.h"
+#include <math.h>
 extern uint8_t EnableAttitudeMadgwick;
 
 IMUdata Accel;
@@ -12,7 +13,12 @@ IMUdata AccelFilteredMax;
 IMUdata GyroFiltered;
 IMUdata GyroBias;
 IMUdata GyroCalibration;
+// Adjustable parameter: lower = slower yaw correction
+#define YAW_CORRECTION_GAIN 0.01f
 
+extern int64_t GPSLastSpeedKmhReceivedTick;
+
+float GPSLateralYAcceleration = 0;
 float GPSAccelerationForAttitudeCompensation = 0.0;
 float GFactor = 1.0;
 float GFactorMax = 0;
@@ -24,6 +30,7 @@ float AttitudeYaw = 0;
 float AttitudeYawDegreePerSecond = 0;
 // 1.1.8 Improve reliabilty
 float FilterMoltiplier = 3.0;
+float FilterMoltiplierOutput = 1.0;
 float FilterMoltiplierGyro = 10.0;
 uint16_t lv_atan2(int x, int y);
 // Define complementary filter constant (adjust as needed)
@@ -33,12 +40,11 @@ float AttitudeBalanceAlpha = 0.99;
 uint8_t Device_addr; // default for SD0/SA0 low, 0x6A if high
 acc_scale_t acc_scale = ACC_RANGE_4G;
 gyro_scale_t gyro_scale = GYR_RANGE_64DPS;
-acc_odr_t acc_odr = acc_odr_norm_60;
-gyro_odr_t gyro_odr = gyro_odr_norm_60;
+acc_odr_t acc_odr = acc_odr_norm_30;
+gyro_odr_t gyro_odr = gyro_odr_norm_1000;
 sensor_state_t sensor_state = sensor_default;
-lpf_t acc_lpf=LPF_MODE_0;
-lpf_t gyro_lpf=LPF_MODE_0;
-
+lpf_t acc_lpf = LPF_MODE_0;
+lpf_t gyro_lpf = LPF_MODE_0;
 
 float accelScales, gyroScales;
 float accelScales = 0;
@@ -55,6 +61,53 @@ void QMI8658_Init(void)
     I2C_Read(Device_addr, QMI8658_REVISION_ID, buf, 1);
     printf("QMI8658 Device ID: %x\r\n", buf[0]); // Get chip id
     setState(sensor_running);
+
+    float sampleFreq = 20; // 1Hz ODR 60Hz 2%, Loop is 20Hz
+
+    // 1.1.12 Enable possibility to setup motion
+    nvs_handle_t my_handle;
+    esp_err_t err = nvs_open("storage", NVS_READONLY, &my_handle);
+    if (err != ESP_OK)
+    {
+        printf("Error (%s) opening NVS handle!\n", esp_err_to_name(err));
+    }
+    else
+    {
+        printf("QMI8658 Restore setup from NVM:\n");
+        uint8_t nvm_acc_scale = acc_scale;
+        uint8_t nvm_acc_odr = acc_odr;
+        uint8_t nvm_acc_lpf = acc_lpf;
+        uint8_t nvm_gyro_scale = gyro_scale;
+        uint8_t nvm_gyro_lpf = gyro_lpf;
+        uint8_t nvm_gyro_odr = gyro_odr;
+
+        nvs_get_u8(my_handle, "nvm_acc_scale", &nvm_acc_scale);
+        nvs_get_u8(my_handle, "nvm_acc_odr", &nvm_acc_odr);
+        nvs_get_u8(my_handle, "nvm_acc_lpf", &nvm_acc_lpf);
+        nvs_get_u8(my_handle, "nvm_gyro_scale", &nvm_gyro_scale);
+        nvs_get_u8(my_handle, "nvm_gyro_lpf", &nvm_gyro_lpf);
+        nvs_get_u8(my_handle, "nvm_gyro_odr", &nvm_gyro_odr);
+
+        uint8_t intBuffer = 99;
+        nvs_get_u8(my_handle, "filterAttitude", &intBuffer);
+
+        printf("filterAttitude: %d\n", intBuffer);
+        printf("nvm_acc_scale: %d\n", nvm_acc_scale);
+        printf("nvm_acc_odr: %d\n", nvm_acc_odr);
+        printf("nvm_acc_lpf: %d\n", nvm_acc_lpf);
+        printf("nvm_gyro_scale: %d\n", nvm_gyro_scale);
+        printf("nvm_gyro_odr: %d\n", nvm_gyro_odr);
+        printf("nvm_gyro_lpf: %d\n", nvm_gyro_lpf);
+
+        acc_scale = nvm_acc_scale;
+        acc_odr = nvm_acc_odr;
+        acc_lpf = nvm_acc_lpf;
+        gyro_scale = nvm_gyro_scale;
+        gyro_odr = nvm_gyro_odr;
+        gyro_lpf = nvm_gyro_lpf;
+
+        AttitudeBalanceAlpha = intBuffer / 100.0;
+    }
 
     setAccScale(acc_scale);
     setAccODR(acc_odr);
@@ -115,7 +168,7 @@ void QMI8658_Init(void)
     GyroBias.y = 0;
     GyroBias.z = 0;
 
-    Madgwick_Init(10.0f, 0.1f);
+    Madgwick_Init(sampleFreq, 1.0 - AttitudeBalanceAlpha);
 }
 void QMI8658_Loop(void)
 {
@@ -431,13 +484,27 @@ void getGFactor(void)
         GFactorMin = GFactor;
         GFactorDirty = 1;
     }
-} 
+}
 int64_t esp_timer_get_time(void);
 extern float invSampleFreq;
 
-int16_t YawSamples[20];
-int16_t YawSum;
-uint8_t YawSampleCircle=0;
+extern float q0, q1, q2, q3;
+extern float GPSLastTrack;
+
+#define DEG2RAD (3.14159265359f / 180.0f)
+#define RAD2DEG (180.0f / 3.14159265f)
+#define G 9.81f
+#define PI 3.14159265f
+
+float unwrapAngle(float prev, float current)
+{
+    float delta = current - prev;
+    if (delta > 180.0f)
+        delta -= 360.0f;
+    if (delta < -180.0f)
+        delta += 360.0f;
+    return delta;
+}
 
 void getAttitude(void)
 {
@@ -446,14 +513,14 @@ void getAttitude(void)
     int64_t now = esp_timer_get_time();
     int32_t elapsed = now - last;
     last = now;
-    //invSampleFreq = 1.0/elapsed;
-    printf("Elapsed: %ld\n",elapsed);
+    invSampleFreq = 1000000.0/elapsed;
+    //printf("Hz: %f\n",invSampleFreq);
     */
 
     if (EnableAttitudeMadgwick == 0)
     {
         updateAttitude(AccelFiltered.z, AccelFiltered.y, -AccelFiltered.x, GyroFiltered.z + GyroBias.z + GyroCalibration.z, -(GyroFiltered.y + GyroBias.y + GyroCalibration.y), &AttitudeRoll, &AttitudePitch);
-        AttitudeYawDegreePerSecond = GyroFiltered.x + GyroBias.x + GyroCalibration.x;
+        AttitudeYawDegreePerSecond = -(GyroFiltered.x + GyroBias.x + GyroCalibration.x);
     }
     else
     {
@@ -463,40 +530,142 @@ void getAttitude(void)
         // GX <= GY
         // GY <= GZ
         // GZ <= -GX
-        float DEG2RAD = 3.14159265359f / 180.0f;
+        // float DEG2RAD = 3.14159265359f / 180.0f;
 
         // Example: convert gyro values
-        float gz_rad = (GyroFiltered.z + GyroBias.z + GyroCalibration.z) * DEG2RAD /2.0;
-        float gy_rad = (GyroFiltered.y + GyroBias.y + GyroCalibration.y) * DEG2RAD /2.0;
-        float gx_rad = (GyroFiltered.x + GyroBias.x + GyroCalibration.x) * DEG2RAD/2.0;
+        float gz_rad = (GyroFiltered.z + GyroBias.z + GyroCalibration.z) * DEG2RAD;
+        float gy_rad = (GyroFiltered.y + GyroBias.y + GyroCalibration.y) * DEG2RAD;
+        float gx_rad = (GyroFiltered.x + GyroBias.x + GyroCalibration.x) * DEG2RAD;
+        // No interference between axis but Q output Roll and Pitch output are swapped
+        Madgwick_UpdateIMU(gy_rad, gz_rad, gx_rad,
+                           AccelFiltered.y + GPSLateralYAcceleration,                // ROLL
+                           AccelFiltered.z - GPSAccelerationForAttitudeCompensation, // PITCH
+                           AccelFiltered.x                                           // YAW
+        );
 
-        Madgwick_UpdateIMU(gz_rad, gy_rad, -gx_rad, -AccelFiltered.z/*PITCH*/, -AccelFiltered.y/*ROLL*/, AccelFiltered.x /*YAW*/);
-        //Madgwick_UpdateIMU(gz_rad, gy_rad, -gx_rad, AccelFiltered.z, AccelFiltered.y, -AccelFiltered.x);
-        // 3. Get Euler angles
-        Madgwick_GetEuler(&AttitudeRoll, &AttitudePitch, &AttitudeYaw);
+        // Interference but Axis are with minus (upside down)
+        /*
+                      Madgwick_UpdateIMU(gz_rad, gy_rad, gx_rad,
+                           -(AccelFiltered.z - GPSAccelerationForAttitudeCompensation), // PITCH
+                           -(AccelFiltered.y + GPSLateralYAcceleration), // ROLL
+                           AccelFiltered.x // YAW
+        );
+        */
+        // Upsidedown
+        // Madgwick_UpdateIMU(gz_rad, gy_rad, -gx_rad, AccelFiltered.z, AccelFiltered.y, -AccelFiltered.x);
+        int64_t now = esp_timer_get_time();
+        int64_t GPSIsReliable = now - GPSLastSpeedKmhReceivedTick;
 
+        if (GPSIsReliable < 10000000 && false)
+        {
+            // float yaw_madgwick = atan2f(2.0f * (q1 * q2 + q0 * q3),
+            //                             q0 * q0 + q1 * q1 - q2 * q2 - q3 * q3);
+            float yaw_madgwick = atan2f(2.0f * (q0 * q3 + q1 * q2),
+                                        1.0f - 2.0f * (q2 * q2 + q3 * q3));
+
+            // printf("Yaw: %.1f GPS: %.1f\n", yaw_madgwick * RAD2DEG, GPSLastTrack);
+            //  Convert GPS track to radians
+            float yaw_gps = GPSLastTrack * DEG2RAD;
+            // Ensure shortest angular difference
+            float yaw_error = yaw_gps - yaw_madgwick;
+            if (yaw_error > PI)
+                yaw_error -= 2.0f * PI;
+            if (yaw_error < -PI)
+                yaw_error += 2.0f * PI;
+
+            // Apply small correction to yaw
+            float yaw_correction = yaw_error * YAW_CORRECTION_GAIN;
+            // Rotate quaternion around Z by yaw_correction
+            float half_yaw = yaw_correction / 2.0f;
+            float sin_half = sinf(half_yaw);
+            float cos_half = cosf(half_yaw);
+
+            // Yaw correction quaternion (rotation around Z)
+            float dq0 = cos_half;
+            float dq1 = 0;
+            float dq2 = 0;
+            float dq3 = sin_half;
+            float rq0 = dq0 * q0 - dq1 * q1 - dq2 * q2 - dq3 * q3;
+            float rq1 = dq0 * q1 + dq1 * q0 + dq2 * q3 - dq3 * q2;
+            float rq2 = dq0 * q2 - dq1 * q3 + dq2 * q0 + dq3 * q1;
+            float rq3 = dq0 * q3 + dq1 * q2 - dq2 * q1 + dq3 * q0;
+
+            // Normalize and set corrected quaternion
+            float norm = sqrtf(rq0 * rq0 + rq1 * rq1 + rq2 * rq2 + rq3 * rq3);
+            q0 = rq0 / norm;
+            q1 = rq1 / norm;
+            q2 = rq2 / norm;
+            q3 = rq3 / norm;
+
+            float updated_yaw = atan2f(2.0f * (q0 * q3 + q1 * q2),
+                                       1.0f - 2.0f * (q2 * q2 + q3 * q3));
+            printf("GPS Track: %.1f Yaw: %.1f New: %.1f\n",
+                   GPSLastTrack,
+                   yaw_madgwick * RAD2DEG,
+                   updated_yaw * RAD2DEG);
+        }
+        //  3. Get Euler angles
+        // Roll and Pitch are swapped
+        Madgwick_GetEuler(&AttitudePitch, &AttitudeRoll, &AttitudeYaw);
+
+        static float prev_yaw = 0;
+        float dt = 0.05f; // 1/20Hz
+        float yaw_rate_dps = unwrapAngle(prev_yaw, AttitudeYaw) / dt;
+        prev_yaw = AttitudeYaw;
+
+        float alpha = 0.01f; // Smoothing factor (0.0–1.0)
+        AttitudeYawDegreePerSecond = alpha * yaw_rate_dps + (1.0f - alpha) * AttitudeYawDegreePerSecond;
+
+        // printf("Yaw Corrected: %.1f\n", AttitudeYaw);
 
         /*
-        static float lastAttitudeYaw = 0;
-        AttitudeYawDegreePerSecond = (2*AttitudeYawDegreePerSecond+(AttitudeYaw-lastAttitudeYaw)*60)/3.0;
-        lastAttitudeYaw=AttitudeYaw;
-*/
-        static float lastAttitudeYaw = 0;
-        float Yaw10 = (AttitudeYaw-lastAttitudeYaw)*10.0;
-        int16_t oldestYawSample = YawSamples[YawSampleCircle];
-        YawSum = YawSum - oldestYawSample+Yaw10;
-        YawSamples[YawSampleCircle]=Yaw10;
-        YawSampleCircle = (YawSampleCircle+1)%20;
-        AttitudeYawDegreePerSecond = -YawSum/2.5;
-        lastAttitudeYaw=AttitudeYaw;
+
+        int16_t YawSamples[20];
+        int16_t YawSum;
+        uint8_t YawSampleCircle = 0;
+
+                float AttitudeYawRettified = AttitudeYaw;
+                if(AttitudeYawRettified>180)AttitudeYawRettified=AttitudeYawRettified-180.0;
+
+
+
+                float Yaw10 = (AttitudeYawRettified) * 10.0;
+                int16_t oldestYawSample = YawSamples[YawSampleCircle];
+                static float lastAttitudeYawDps = 0;
+                float ydps = (AttitudeYawRettified - (oldestYawSample))/20.0;
+
+                AttitudeYawDegreePerSecond = (lastAttitudeYawDps*3.0+ydps)/4.0;
+                YawSamples[YawSampleCircle] = Yaw10;
+                YawSampleCircle = (YawSampleCircle + 1) % 20;
+
+
+
+                float Yaw10 = (AttitudeYaw) * 10.0;
+                int16_t oldestYawSample = YawSamples[YawSampleCircle];
+                static float lastAttitudeYawDps = 0;
+                AttitudeYawDegreePerSecond = (AttitudeYaw + lastAttitudeYawDps -  (oldestYawSample)/10.0)/20.0;
+                lastAttitudeYawDps = (AttitudeYaw + lastAttitudeYawDps -  (oldestYawSample)/10.0);
+                YawSamples[YawSampleCircle] = Yaw10;
+
+
+
+                static float lastAttitudeYaw = 0;
+                float Yaw10 = (AttitudeYaw - lastAttitudeYaw) * 10.0;
+                int16_t oldestYawSample = YawSamples[YawSampleCircle];
+                YawSum = YawSum - oldestYawSample + Yaw10;
+                YawSamples[YawSampleCircle] = Yaw10;
+                YawSampleCircle = (YawSampleCircle + 1) % 20;
+                AttitudeYawDegreePerSecond = -YawSum / 2.5;
+                lastAttitudeYaw = AttitudeYaw;
+                */
         /*
         printf("%3d ",YawSum);
         for(int i=0;i<20;i++){
 printf("%3d",YawSamples[i]);
         }
         printf("\n");
-        
-        
+
+
 
         printf("AX:%3.1f AY:%3.1f AZ:%3.1f GX:%3.1f GY:%3.1f GZ:%3.1f ROLL:%3.1f PITCH:%3.1f YAW:%3.1f V:%3.1f\n",
          AccelFiltered.z, AccelFiltered.y, -AccelFiltered.x,
@@ -506,9 +675,16 @@ printf("%3d",YawSamples[i]);
         );
 
 */
-        
-        AttitudeRoll = AttitudeRoll-180;
-        AttitudePitch = -AttitudePitch;
 
+        static float LastAttitudeRoll = 0;
+        static float LastAttitudePitch = 0;
+
+        // AttitudeRoll = (LastAttitudeRoll * 3 + (AttitudeRoll - 180)) / 4.0;
+        // AttitudePitch = (LastAttitudePitch * 3 - AttitudePitch) / 4.0;
+        AttitudeRoll = (LastAttitudeRoll * FilterMoltiplierOutput + (AttitudeRoll)) / (FilterMoltiplierOutput + 1);
+        AttitudePitch = (LastAttitudePitch * FilterMoltiplierOutput + AttitudePitch) / (FilterMoltiplierOutput + 1);
+
+        LastAttitudeRoll = AttitudeRoll;
+        LastAttitudePitch = AttitudePitch;
     }
 }

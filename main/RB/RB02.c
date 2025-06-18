@@ -38,7 +38,7 @@
  */
 #include "RB02.h"
 // 1.1.2 Version is here
-#define RB_VERSION "1.1.11"
+#define RB_VERSION "1.1.16B"
 // 1.1.1 Remove tabs with GPS if not installed
 #define RB_ENABLE_GPS 1
 // #define ENABLE_DEMO_SCREENS 1
@@ -50,7 +50,7 @@
 #include "RoundSynthViewAttitude.c"
 #endif
 
-//#define VIBRATION_TEST 1
+#define VIBRATION_TEST 1
 
 #include "RoundAltimeter.c"
 
@@ -124,6 +124,7 @@ extern lv_coord_t TouchPadLastX;
 extern lv_coord_t TouchPadLastY;
 extern float AttitudeBalanceAlpha;
 extern float FilterMoltiplier;
+extern float FilterMoltiplierOutput;
 extern float FilterMoltiplierGyro;
 extern float GFactor;
 extern float GFactorMax;
@@ -226,12 +227,20 @@ typedef struct
 gps_t NMEA_DATA;
 int16_t AttitudeYawCorrection = 0;
 
+// 1.1.12 Fusion
+float FusionAHRSDeltaTrackFromGPS = 0;
+float GPSLastTrack = 0;
+extern float GPSLateralYAcceleration;
+extern bool GPSIsReliable;
+int64_t GPSDT = 0;
+extern float q0, q1, q2, q3;
+
 int32_t GpsSpeed0ForDisable = 0;
 float GPSLastSpeedKmhForAttitudeComponesation = 0;
-int64_t GPSLastSpeedKmhReceivedTick = 0;
+int64_t GPSLastSpeedKmhReceivedTick = -20000000;
 float GPSCurrentSpeedKmhForAttitudeComponesation = 0;
 extern float GPSAccelerationForAttitudeCompensation;
-bool GPSAccelerationForAttitudeCompensationEnabled = false;
+bool GPSAccelerationForAttitudeCompensationEnabled = true;
 uint8_t EnableAttitudeMadgwick = 1;
 
 // DEFINES
@@ -265,10 +274,16 @@ static void Onboard_create_Track(lv_obj_t *parent);
 static void Onboard_create_Variometer(lv_obj_t *parent);
 static void Onboard_create_GMeter(lv_obj_t *parent);
 static void Onboard_create_Setup(lv_obj_t *parent);
+static void Onboard_create_VibrationTest(lv_obj_t *parent);
 static void speedBgClicked(lv_event_t *event);
 uint32_t timerDiffByIndex(int st);
 void rb_increase_lvgl_tick(lv_timer_t *t);
 void update_GMeter_lvgl_tick(lv_timer_t *t);
+void rotate_AttitudeGearByDegree(int lastAttitudeRoll);
+void update_Attitude_lvgl_tick(lv_timer_t *t);
+#ifdef VIBRATION_TEST
+void update_Vibration_lvgl_tick(lv_timer_t *t);
+#endif
 void update_Clock_lvgl_tick(lv_timer_t *t);
 void update_AltimeterDigital_lvgl_tick(lv_timer_t *t);
 void update_Altimeter_lvgl_tick(lv_timer_t *t);
@@ -323,11 +338,11 @@ typedef enum
 #endif
   RB02_TAB_VAR,
   RB02_TAB_GMT,
-#ifdef VIBRATION_TEST
-#else
   RB02_TAB_CLK,
-#endif
   RB02_TAB_SET,
+#ifdef VIBRATION_TEST
+  RB02_TAB_VBR,
+#endif
   RB02_TAB_DEV
 } tabs;
 
@@ -347,6 +362,7 @@ lv_obj_t *SettingStatus5 = NULL;
 lv_obj_t *SettingStatus4UART = NULL;
 lv_style_t style_title;
 lv_obj_t *SettingLabelFilter = NULL;
+lv_obj_t *SettingLabelFilterOutput = NULL;
 lv_obj_t *SettingLabelFilterGyro = NULL;
 lv_obj_t *SettingLabelDriverLoopMilliseconds = NULL;
 
@@ -391,10 +407,13 @@ datetime_t datetimeTimer2 = {0};
 datetime_t datetimeTimer3 = {0};
 lv_res_t Screen_TurnSlip_Obj_Ball_Size = SCREEN_HEIGHT / 12;
 lv_obj_t *Screen_TurnSlip_Obj_Ball = NULL;
+lv_obj_t *Screen_TurnSlip_Obj_Label = NULL;
 lv_obj_t *Screen_TurnSlip_Obj_Turn = NULL;
 lv_obj_t *Screen_Speed_SpeedText = NULL;
 lv_obj_t *Screen_Speed_SpeedTick = NULL;
 lv_obj_t *Screen_Track_TrackText = NULL;
+lv_obj_t *Screen_Track_TrackSource = NULL;
+
 lv_obj_t *Screen_GMeter_Ball = NULL;
 lv_obj_t *Screen_GMeter_BallMax = NULL;
 #ifdef VIBRATION_TEST
@@ -406,6 +425,14 @@ extern lpf_t acc_lpf;
 extern lpf_t gyro_lpf;
 lv_obj_t *Screen_GMeter_BallGyro = NULL;
 lv_obj_t *GMeterLabelGyro = NULL;
+lv_obj_t *Screen_Vibration_Accel_Ball = NULL;
+lv_obj_t *Screen_Vibration_GPSAccel_Ball = NULL;
+lv_obj_t *Screen_Vibration_GPSAccel_Label = NULL;
+
+lv_obj_t *Screen_Vibration_Yaw_Ball = NULL;
+
+lv_obj_t *Screen_Vibration_Accel_Label = NULL;
+lv_obj_t *Screen_Vibration_IMU_Label = NULL;
 lv_obj_t *QMISetRangeGyroCombo = NULL;
 lv_obj_t *QMISetRangeAccCombo = NULL;
 lv_obj_t *QMISetODRGyroCombo = NULL;
@@ -523,13 +550,21 @@ void RB02_Example1(void)
   lv_obj_t *t3 = lv_tabview_add_tab(tv, "Altimeter");
   lv_obj_t *t3b = lv_tabview_add_tab(tv, "Altimeter");
   lv_obj_t *t4 = lv_tabview_add_tab(tv, "TurnSlip");
-#ifdef RB_ENABLE_GPS
+  // Track backup as Gyroscope Directional
   lv_obj_t *t5 = lv_tabview_add_tab(tv, "Track");
-#endif
   lv_obj_t *t6 = lv_tabview_add_tab(tv, "Variometer");
   lv_obj_t *t7 = lv_tabview_add_tab(tv, "GMeter");
+#ifdef RB_ENABLE_GPS
   lv_obj_t *t8 = lv_tabview_add_tab(tv, "Clock");
+#else
+  // TODO: Rename to TMR
+  lv_obj_t *t8 = lv_tabview_add_tab(tv, "Clock");
+#endif
   lv_obj_t *t9 = lv_tabview_add_tab(tv, "Setup");
+#ifdef VIBRATION_TEST
+  lv_obj_t *t10 = lv_tabview_add_tab(tv, "Vibration");
+#else
+#endif
   // lv_obj_t *t10 = lv_tabview_add_tab(tv, "Demo");
 #ifdef ENABLE_DEMO_SCREENS
   Onboard_create_Base(tu, &RoundSynthViewSide);
@@ -554,10 +589,7 @@ void RB02_Example1(void)
 #endif
   Onboard_create_Variometer(t6);
   Onboard_create_GMeter(t7);
-#ifdef VIBRATION_TEST
-#else
   Onboard_create_Clock(t8);
-#endif
   // 1.1.3 Display unique serial number for device tracking
   esp_efuse_mac_get_default((uint8_t *)(&_chipmacid));
   int8_t hasGPS = 0;
@@ -565,7 +597,13 @@ void RB02_Example1(void)
   hasGPS = 1;
 #endif
   printf("$RB,02,%d,%s,%d,%llX\n", RB_02_DISPLAY_SIZE, RB_VERSION, hasGPS, _chipmacid);
+
   Onboard_create_Setup(t9);
+#ifdef VIBRATION_TEST
+  Onboard_create_VibrationTest(t10);
+#else
+#endif
+
   // Onboard_create(t10);
 
   // BMP280
@@ -633,8 +671,11 @@ void RB02_Example1(void)
     */
 }
 
+#define DEG2RAD (3.14159265359f / 180.0f)
+#define G 9.81f
 void nmea_RMC_UpdatedValueFor(uint8_t csvCounter, int32_t finalNumber, uint8_t decimalCounter)
 {
+
   float conversionValue = finalNumber;
   for (uint8_t c = 0; c < decimalCounter; c++)
   {
@@ -668,39 +709,73 @@ void nmea_RMC_UpdatedValueFor(uint8_t csvCounter, int32_t finalNumber, uint8_t d
     /* code */
     break;
   case 7: // Speed KT
-
     NMEA_DATA.speed = conversionValue * 1.852;
-
-    if (GPSAccelerationForAttitudeCompensationEnabled == true)
-    {
-      int64_t now = esp_timer_get_time();
-      int64_t DT = (now - GPSLastSpeedKmhReceivedTick);
-
-      if (DT > 0)
-      {
-        float GPSLastSpeedKmhForAttitudeComponesationElapsedTime = DT / (1000000.0);
-        GPSCurrentSpeedKmhForAttitudeComponesation = NMEA_DATA.speed;
-        GPSAccelerationForAttitudeCompensation = ((GPSCurrentSpeedKmhForAttitudeComponesation) - (GPSLastSpeedKmhForAttitudeComponesation)) / 9.8 / GPSLastSpeedKmhForAttitudeComponesationElapsedTime / 3.6;
-        if (GPSAccelerationForAttitudeCompensation > 0.5)
-          GPSAccelerationForAttitudeCompensation = 0.5;
-        if (GPSAccelerationForAttitudeCompensation < -0.5)
-          GPSAccelerationForAttitudeCompensation = -0.5;
-        // printf("DT %lld Compensate: %.1f %.1f diff %.2f\n",DT,GPSAccelerationForAttitudeCompensation,NMEA_DATA.speed,GPSCurrentSpeedKmhForAttitudeComponesation-GPSLastSpeedKmhForAttitudeComponesation);
-        GPSLastSpeedKmhForAttitudeComponesation = NMEA_DATA.speed;
-      }
-      GPSLastSpeedKmhReceivedTick = now;
-    }
-
+    GPSCurrentSpeedKmhForAttitudeComponesation = NMEA_DATA.speed;
     /* code */
     break;
   case 8: // Track
-    /* code */
-
+          /* code */
+    GPSLateralYAcceleration = 0;
+    GPSAccelerationForAttitudeCompensation = 0;
     NMEA_DATA.cog = conversionValue;
-// Gyroscope alignment
-  AttitudeYawCorrection = (NMEA_DATA.cog-AttitudeYaw);
+    // Gyroscope alignment managed by the new algorithm
+    // AttitudeYawCorrection = (NMEA_DATA.cog - AttitudeYaw);
+    if (NMEA_DATA.cog > 0 && GPSCurrentSpeedKmhForAttitudeComponesation > 3)
+    {
 
+      // 1.1.12 Fusion
+      FusionAHRSDeltaTrackFromGPS = NMEA_DATA.cog - GPSLastTrack;
 
+      if (FusionAHRSDeltaTrackFromGPS > 180.0f)
+        FusionAHRSDeltaTrackFromGPS -= 360.0f;
+      if (FusionAHRSDeltaTrackFromGPS < -180.0f)
+        FusionAHRSDeltaTrackFromGPS += 360.0f;
+      if (GPSAccelerationForAttitudeCompensationEnabled == true)
+      {
+
+        // Front G during takeoff and brakes
+        float GPSLastSpeedKmhForAttitudeComponesationElapsedTime = GPSDT / (1000000.0);
+        // float GPSLastSpeedKmhForAttitudeComponesationElapsedTime = 0.1;
+        float DV = ((GPSCurrentSpeedKmhForAttitudeComponesation) - (GPSLastSpeedKmhForAttitudeComponesation));
+        GPSAccelerationForAttitudeCompensation = DV / GPSLastSpeedKmhForAttitudeComponesationElapsedTime / 3.6 / G;
+
+        // Lateral G Force during long term turn
+        float yaw_rate_gps_rad = (FusionAHRSDeltaTrackFromGPS / GPSLastSpeedKmhForAttitudeComponesationElapsedTime) * DEG2RAD;
+        float a_lat = GPSCurrentSpeedKmhForAttitudeComponesation * yaw_rate_gps_rad / 3.6;
+        GPSLateralYAcceleration = a_lat / G;
+
+        printf("GPS Speed: %.1f Last Speed %.1f Track: %.1f Last Track %.1f DV: %.1f DTrack: %.1f DT: %.5f AY: %.1f AX: %.1f\n",
+               GPSCurrentSpeedKmhForAttitudeComponesation,
+               GPSLastSpeedKmhForAttitudeComponesation,
+               NMEA_DATA.cog,
+               GPSLastTrack,
+               DV,
+               FusionAHRSDeltaTrackFromGPS,
+               GPSLastSpeedKmhForAttitudeComponesationElapsedTime,
+               GPSAccelerationForAttitudeCompensation,
+               GPSLateralYAcceleration);
+
+        if (GPSAccelerationForAttitudeCompensation > 1.5)
+          GPSAccelerationForAttitudeCompensation = 1.5;
+        if (GPSAccelerationForAttitudeCompensation < -1.5)
+          GPSAccelerationForAttitudeCompensation = -1.5;
+
+        if (GPSLateralYAcceleration > 2)
+        {
+          GPSLateralYAcceleration = 2;
+        }
+        if (GPSLateralYAcceleration < -2)
+        {
+          GPSLateralYAcceleration = -2;
+        }
+      }
+    }
+    else
+    {
+    }
+
+    GPSLastSpeedKmhForAttitudeComponesation = GPSCurrentSpeedKmhForAttitudeComponesation;
+    GPSLastTrack = NMEA_DATA.cog;
 
     break;
   case 9: // Date ddmmyy
@@ -711,6 +786,8 @@ void nmea_RMC_UpdatedValueFor(uint8_t csvCounter, int32_t finalNumber, uint8_t d
 
 bool nmea_RMC_mini_parser(const uint8_t *sentence, uint16_t length)
 {
+  int64_t now = esp_timer_get_time();
+  GPSDT = (now - GPSLastSpeedKmhReceivedTick);
 
   int8_t csvCounter = 0;
   int8_t decimalCounter = 0;
@@ -751,6 +828,8 @@ bool nmea_RMC_mini_parser(const uint8_t *sentence, uint16_t length)
       finalNumber = 10 * finalNumber + (sentence[x] - '0');
     }
   }
+
+  GPSLastSpeedKmhReceivedTick = now;
 
   return true;
 }
@@ -852,6 +931,16 @@ void uart_fetch_data()
           }
         }
       }
+    }
+  }
+  else
+  {
+    // 1.1.16 Enable the INOP in case the GPS is disconnected and does not trigger any data in 5 seconds
+    int64_t now = esp_timer_get_time();
+    int64_t isGPSTimeout = (now - GPSLastSpeedKmhReceivedTick);
+    if (isGPSTimeout > 50000000)
+    {
+      Operative_GPS = false;
     }
   }
   free(data);
@@ -975,7 +1064,7 @@ void nvsRestoreGMeter()
     FilterMoltiplierGyro = intBuffer;
     intBuffer = 90;
     nvs_get_u8(my_handle, "filterAttitude", &intBuffer);
-    AttitudeBalanceAlpha = intBuffer / 100.0;
+    AttitudeBalanceAlpha = intBuffer / 250.0;
 
     nvs_get_u8(my_handle, "loopms", &DriverLoopMilliseconds);
     if (DriverLoopMilliseconds < 1)
@@ -1079,7 +1168,7 @@ void nvsStoreFilters()
     intBuffer = FilterMoltiplierGyro;
     printf("Writing filterGyro from NVS ... %d", intBuffer);
     nvs_set_u8(my_handle, "filterGyro", intBuffer);
-    intBuffer = 100 * AttitudeBalanceAlpha;
+    intBuffer = 250 * AttitudeBalanceAlpha;
     printf("Writing filterAttitude from NVS ... %d", intBuffer);
     nvs_set_u8(my_handle, "filterAttitude", intBuffer);
 
@@ -1187,7 +1276,7 @@ void nvsStoreDefaultScreenOrDemo()
 
 void update_Attitude_lvgl_tick(lv_timer_t *t)
 {
-  float moveY = -4.0 * AttitudePitch;
+  float moveY = 4.0 * AttitudePitch;
   if (moveY > 120)
     moveY = 120;
   else
@@ -1205,8 +1294,18 @@ void update_Attitude_lvgl_tick(lv_timer_t *t)
   lastAttitudePitch = moveY;
   lastAttitudeRoll = -AttitudeRoll;
   // 1.1.1 Rotation of Aircraft symbol
-  lv_img_set_angle(Screen_Attitude_Pitch, 1800 + lastAttitudeRoll * 10.0);
+  lv_img_set_angle(Screen_Attitude_Pitch, lastAttitudeRoll * 10.0);
   lv_obj_set_pos(Screen_Attitude_Pitch, 0, -lastAttitudePitch + att_aircraft.header.h / 2);
+
+  bool isAttitudeFast = true;
+  if (isAttitudeFast == false)
+  {
+    rotate_AttitudeGearByDegree(lastAttitudeRoll);
+  }
+}
+
+void rotate_AttitudeGearByDegree(int lastAttitudeRoll)
+{
 
   for (int a = 0; a < 4; a++)
   {
@@ -1220,15 +1319,15 @@ void update_Attitude_lvgl_tick(lv_timer_t *t)
     {
     case 0:
       lv_obj_set_pos(Screen_Attitude_Rounds[a], -c20, s20);
-      lv_img_set_angle(Screen_Attitude_Rounds[a], 1800 + lastAttitudeRoll * 10.0);
+      lv_img_set_angle(Screen_Attitude_Rounds[a], lastAttitudeRoll * 10.0);
       break;
     case 3: // TL
       lv_obj_set_pos(Screen_Attitude_Rounds[a], -c20 - s21, s20 - c21);
-      lv_img_set_angle(Screen_Attitude_Rounds[a], 1800 + lastAttitudeRoll * 10.0);
+      lv_img_set_angle(Screen_Attitude_Rounds[a], lastAttitudeRoll * 10.0);
       break;
     case 1: // TR
       lv_obj_set_pos(Screen_Attitude_Rounds[a], -c20 + s21, s20 + c21);
-      lv_img_set_angle(Screen_Attitude_Rounds[a], 1800 + lastAttitudeRoll * 10.0);
+      lv_img_set_angle(Screen_Attitude_Rounds[a], lastAttitudeRoll * 10.0);
       break;
     }
   }
@@ -1236,7 +1335,6 @@ void update_Attitude_lvgl_tick(lv_timer_t *t)
 
 void update_TurnSlip_lvgl_tick(lv_timer_t *t)
 {
-
 
   float fay = AccelFiltered.y;
   float ydpg = AttitudeYawDegreePerSecond;
@@ -1246,18 +1344,28 @@ void update_TurnSlip_lvgl_tick(lv_timer_t *t)
   else if (fay > 1.1)
     fay = 1.1;
 
+  char buf[10];
+  if (ydpg > 0)
+  {
+    snprintf(buf, sizeof(buf), "%.0f", ydpg);
+  }
+  else
+  {
+    snprintf(buf, sizeof(buf), "%.0f", -ydpg);
+  }
 
-  if (ydpg < -75)
-    ydpg = -75;
-  else if (ydpg > 75)
-    ydpg = 75;
+  if (ydpg < -10)
+    ydpg = -10;
+  else if (ydpg > 10)
+    ydpg = 10;
 
+  lv_label_set_text(Screen_TurnSlip_Obj_Label, buf);
 
   float range_X = 100;
   float range_Y = 16;
   lv_obj_set_pos(Screen_TurnSlip_Obj_Ball, -range_X * fay, 88 - abs((int)(range_Y * fay)));
   // 1.1.3 Bugfix: Bias was not applied to Turn & Slip
-  lv_img_set_angle(Screen_TurnSlip_Obj_Turn, -10.0 * (ydpg));
+  lv_img_set_angle(Screen_TurnSlip_Obj_Turn, -10.0 * (ydpg) * 8.0);
 }
 
 void update_TurnSlip2_lvgl_tick(lv_timer_t *t)
@@ -1428,15 +1536,16 @@ void Get_BMP280(void)
 void update_Track_lvgl_tick(lv_timer_t *t)
 {
   static int16_t lastCOG = 0;
-  //int32_t COG = -NMEA_DATA.cog * 10;
-  int16_t COG = AttitudeYaw+AttitudeYawCorrection;
-  if(COG<0)COG=COG+360;
-  COG=COG%360;
+  // int32_t COG = -NMEA_DATA.cog * 10;
+  int16_t COG = AttitudeYaw + AttitudeYawCorrection;
+  if (COG < 0)
+    COG = COG + 360;
+  COG = COG % 360;
   if (COG != lastCOG)
   {
     printf("NMEA: Track %d-->%d\n", lastCOG, COG);
     lastCOG = COG;
-    lv_img_set_angle(Screen_Gyro_Gear,-COG*10);
+    lv_img_set_angle(Screen_Gyro_Gear, COG * 10);
 
     char buf[15];
     snprintf(buf, sizeof(buf), "%d°", COG);
@@ -1550,6 +1659,9 @@ void readCalibration()
       bmp280Calibration[i] = signedPass;
   }
   printf("\n");
+
+  example1_BMP280_lvgl_tick(NULL);
+  Variometer = 0;
 }
 
 void rb_check_attitude_inop()
@@ -1747,13 +1859,18 @@ void rb_increase_lvgl_tick(lv_timer_t *t)
       }
     }
     break;
+#endif
   case RB02_TAB_TRK:
+#ifdef RB_ENABLE_GPS
     uart_fetch_data();
+#endif
     update_Track_lvgl_tick(t);
+#ifdef RB_ENABLE_GPS
     if (Operative_GPS && OperativeWarningVisible == true)
     {
       lv_obj_add_flag(OperativeWarning, LV_OBJ_FLAG_HIDDEN);
       OperativeWarningVisible = false;
+      lv_label_set_text(Screen_Track_TrackSource, "GPS TRACK");
     }
     else
     {
@@ -1761,13 +1878,14 @@ void rb_increase_lvgl_tick(lv_timer_t *t)
       {
         lv_obj_clear_flag(OperativeWarning, LV_OBJ_FLAG_HIDDEN);
         OperativeWarningVisible = true;
+        lv_label_set_text(Screen_Track_TrackSource, "GYRO");
       }
       else
       {
       }
     }
-    break;
 #endif
+    break;
   case RB02_TAB_DEV:
     break;
   case RB02_TAB_VAR:
@@ -1833,14 +1951,21 @@ void rb_increase_lvgl_tick(lv_timer_t *t)
       uart_fetch_data();
     }
     update_Attitude_lvgl_tick(t);
-    if (Operative_Attitude && OperativeWarningVisible == true)
+
+    // 1.1.16 The Attitude is assisted by GPS
+    uint8_t isAttitudeDoNotNeedGPS = 1;
+#ifdef RB_ENABLE_GPS
+    isAttitudeDoNotNeedGPS = Operative_GPS;
+#endif
+
+    if (Operative_Attitude && isAttitudeDoNotNeedGPS && OperativeWarningVisible == true)
     {
       lv_obj_add_flag(OperativeWarning, LV_OBJ_FLAG_HIDDEN);
       OperativeWarningVisible = false;
     }
     else
     {
-      if (Operative_Attitude == 0 && OperativeWarningVisible == false)
+      if ((Operative_Attitude == 0 || isAttitudeDoNotNeedGPS == 0) && OperativeWarningVisible == false)
       {
         lv_obj_clear_flag(OperativeWarning, LV_OBJ_FLAG_HIDDEN);
         OperativeWarningVisible = true;
@@ -1889,11 +2014,17 @@ void rb_increase_lvgl_tick(lv_timer_t *t)
     }
     break;
 #ifdef VIBRATION_TEST
-#else
+  case RB02_TAB_VBR:
+#ifdef RB_ENABLE_GPS
+    uart_fetch_data();
+#endif
+
+    update_Vibration_lvgl_tick(t);
+    break;
+#endif
   case RB02_TAB_CLK:
     update_Clock_lvgl_tick(t);
     break;
-#endif
   case RB02_TAB_SET:
   {
     char buf[4 + 4 + 4 + 4 + 4 + 4 + 22];
@@ -2032,6 +2163,7 @@ static void mbox1_cage_event_cb(lv_event_t *e)
         GyroBias.x = -GyroFiltered.x - GyroCalibration.x;
         GyroBias.y = -GyroFiltered.y - GyroCalibration.y;
         GyroBias.z = -GyroFiltered.z - GyroCalibration.z;
+
         rb_check_attitude_inop();
       }
       lv_msgbox_close(msgbox);
@@ -2090,17 +2222,19 @@ static void actionInTab(touchLocation location)
   case RB02_TAB_TRK:
     switch (location)
     {
+    case RB02_TOUCH_CENTER:
+      lv_att_reset_msgbox();
+      break;
     case RB02_TOUCH_N:
-      AttitudeYawCorrection=AttitudeYawCorrection+10;
+      AttitudeYawCorrection = AttitudeYawCorrection + 10;
       break;
     case RB02_TOUCH_S:
-      AttitudeYawCorrection=AttitudeYawCorrection-10;
+      AttitudeYawCorrection = AttitudeYawCorrection - 10;
       break;
     default:
       break;
     }
-
-
+    break;
   case RB02_TAB_ALT:
   case RB02_TAB_ALD:
     switch (location)
@@ -2123,12 +2257,8 @@ static void actionInTab(touchLocation location)
     lv_label_set_text(Screen_Altitude_QNH2, buf);
     snprintf(buf, sizeof(buf), "%+ld", Variometer);
     lv_label_set_text(Screen_Altitude_Variometer2, buf);
-
     example1_BMP280_lvgl_tick(NULL);
-
     break;
-#ifdef VIBRATION_TEST
-#else
   case RB02_TAB_CLK:
     switch (location)
     {
@@ -2179,8 +2309,6 @@ static void actionInTab(touchLocation location)
       break;
     }
     break;
-
-#endif
   case RB02_TAB_GMT:
     switch (location)
     {
@@ -2194,6 +2322,7 @@ static void actionInTab(touchLocation location)
     }
     break;
 
+  case RB02_TAB_VBR:
   case RB02_TAB_TRN:
   case RB02_TAB_ATT:
     switch (location)
@@ -2235,6 +2364,10 @@ static void speedBgClicked(lv_event_t *event)
   case RB02_TOUCH_E:
     cur++;
     changedTab = true;
+    if (cur >= RB02_TAB_SET - 1)
+    {
+      cur = RB02_TAB_SET - 1;
+    }
     break;
   default:
     actionInTab(location);
@@ -2242,10 +2375,10 @@ static void speedBgClicked(lv_event_t *event)
   }
 
   // Skip setup page
-  if (cur >= tabview->tab_cnt - 1)
-  {
-    cur = tabview->tab_cnt - 2;
-  }
+#ifdef VIBRATION_TEST
+#else
+#endif
+
   lv_tabview_set_act(tv, cur, LV_ANIM_ON);
   if (DeviceIsDemoMode == 0 && changedTab)
   {
@@ -2272,9 +2405,9 @@ static void ChangeAttitudeBalanceAlphaChanged(lv_event_t *e)
   uint8_t FilterMoltiplierInt = lv_slider_get_value(lv_event_get_target(e));
   printf("Changed Filtering ratio from: %.2f to: %d\n", AttitudeBalanceAlpha, FilterMoltiplierInt);
   float f = FilterMoltiplierInt;
-  AttitudeBalanceAlpha = f / 100.0;
+  AttitudeBalanceAlpha = f / 250.0;
   char buf[23 + 8];
-  sprintf(buf, "Attitude compensation: %.0f", AttitudeBalanceAlpha * 100);
+  sprintf(buf, "Attitude compensation: %.0f", AttitudeBalanceAlpha * 250.0);
   lv_label_set_text(SettingAttitudeCompensation, buf);
 
   nvsStoreFilters();
@@ -2379,6 +2512,18 @@ static void DisableFilteringChanged(lv_event_t *e)
 
   nvsStoreFilters();
 }
+static void DisableFilteringOutputChanged(lv_event_t *e)
+{
+  uint8_t FilterMoltiplierInt = lv_slider_get_value(lv_event_get_target(e));
+  printf("Changed Filtering ratio from: %.1f to: %d\n", FilterMoltiplierOutput, FilterMoltiplierInt);
+  FilterMoltiplierOutput = FilterMoltiplierInt;
+
+  char buf[16 + 8];
+  sprintf(buf, "Sensor Out: %.0f", FilterMoltiplierOutput);
+  lv_label_set_text(SettingLabelFilterOutput, buf);
+
+  nvsStoreFilters();
+}
 static void DisableFilteringGyroChanged(lv_event_t *e)
 {
   uint8_t FilterMoltiplierInt = lv_slider_get_value(lv_event_get_target(e));
@@ -2398,7 +2543,7 @@ static void DriverLoopMillisecondsChanged(lv_event_t *e)
   DriverLoopMilliseconds = FilterMoltiplierInt;
 
   char buf[16 + 8];
-  sprintf(buf, "Sensor Hz: %d", 10 + DriverLoopMilliseconds);
+  sprintf(buf, "Sensor Hz: %.0f", 1000.0 / (10 + DriverLoopMilliseconds));
   lv_label_set_text(SettingLabelDriverLoopMilliseconds, buf);
 
   nvsStoreFilters();
@@ -2592,6 +2737,38 @@ static void Onboard_create_Setup(lv_obj_t *parent)
     lv_obj_set_style_outline_width(DisableFiltering, 2, LV_PART_INDICATOR);
     lv_obj_set_style_outline_color(DisableFiltering, lv_color_hex(0xD3D3D3), LV_PART_INDICATOR);
     lv_slider_set_range(DisableFiltering, 0, 25);
+    lv_slider_set_value(DisableFiltering, FilterMoltiplierOutput, LV_ANIM_OFF);
+    lv_obj_add_event_cb(DisableFiltering, DisableFilteringOutputChanged, LV_EVENT_VALUE_CHANGED, DisableFiltering);
+    lv_obj_align(DisableFiltering, LV_ALIGN_CENTER, 0, lineY + 30);
+
+    lv_obj_t *DisableFilteringLabel = lv_label_create(parent);
+    lv_obj_set_size(DisableFilteringLabel, 300, 20);
+    lv_obj_align(DisableFilteringLabel, LV_ALIGN_CENTER, 0, lineY);
+    lv_obj_set_style_text_align(DisableFilteringLabel, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_set_style_text_font(DisableFilteringLabel, &lv_font_montserrat_16, 0);
+    char buf[16 + 8];
+    sprintf(buf, "Out filtering: %.0f", FilterMoltiplierOutput);
+    lv_label_set_text(DisableFilteringLabel, buf);
+    lv_obj_add_style(DisableFilteringLabel, &style_title, LV_STATE_DEFAULT);
+
+    SettingLabelFilterOutput = DisableFilteringLabel;
+
+    lineY += 70;
+  }
+
+  if (true)
+  {
+    lv_obj_t *DisableFiltering = lv_slider_create(parent);
+    lv_obj_add_flag(DisableFiltering, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_set_size(DisableFiltering, 300, 35);
+    lv_obj_set_style_radius(DisableFiltering, 3, LV_PART_KNOB); // Adjust the value for more or less rounding
+    lv_obj_set_style_bg_opa(DisableFiltering, LV_OPA_TRANSP, LV_PART_KNOB);
+
+    lv_obj_set_style_bg_color(DisableFiltering, lv_color_hex(0xAAAAAA), LV_PART_KNOB);
+    lv_obj_set_style_bg_color(DisableFiltering, lv_color_hex(0xFFFFFF), LV_PART_INDICATOR);
+    lv_obj_set_style_outline_width(DisableFiltering, 2, LV_PART_INDICATOR);
+    lv_obj_set_style_outline_color(DisableFiltering, lv_color_hex(0xD3D3D3), LV_PART_INDICATOR);
+    lv_slider_set_range(DisableFiltering, 0, 25);
     lv_slider_set_value(DisableFiltering, FilterMoltiplier, LV_ANIM_OFF);
     lv_obj_add_event_cb(DisableFiltering, DisableFilteringChanged, LV_EVENT_VALUE_CHANGED, DisableFiltering);
     lv_obj_align(DisableFiltering, LV_ALIGN_CENTER, 0, lineY + 30);
@@ -2666,7 +2843,7 @@ static void Onboard_create_Setup(lv_obj_t *parent)
     lv_obj_set_style_text_align(DisableFilteringLabel, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_set_style_text_font(DisableFilteringLabel, &lv_font_montserrat_16, 0);
     char buf[16 + 8];
-    sprintf(buf, "Sensor Hz: %d", 10 + DriverLoopMilliseconds);
+    sprintf(buf, "Sensor Hz: %.0f", 1000.0 / (10 + DriverLoopMilliseconds));
     lv_label_set_text(DisableFilteringLabel, buf);
     lv_obj_add_style(DisableFilteringLabel, &style_title, LV_STATE_DEFAULT);
 
@@ -2687,8 +2864,8 @@ static void Onboard_create_Setup(lv_obj_t *parent)
     lv_obj_set_style_bg_color(DisableFiltering, lv_color_hex(0xFFFFFF), LV_PART_INDICATOR);
     lv_obj_set_style_outline_width(DisableFiltering, 2, LV_PART_INDICATOR);
     lv_obj_set_style_outline_color(DisableFiltering, lv_color_hex(0xD3D3D3), LV_PART_INDICATOR);
-    lv_slider_set_range(DisableFiltering, 0, 100);
-    lv_slider_set_value(DisableFiltering, AttitudeBalanceAlpha * 100, LV_ANIM_OFF);
+    lv_slider_set_range(DisableFiltering, 0, 250);
+    lv_slider_set_value(DisableFiltering, AttitudeBalanceAlpha * 250, LV_ANIM_OFF);
     lv_obj_add_event_cb(DisableFiltering, ChangeAttitudeBalanceAlphaChanged, LV_EVENT_VALUE_CHANGED, DisableFiltering);
     lv_obj_align(DisableFiltering, LV_ALIGN_CENTER, 0, lineY + 30);
 
@@ -2698,7 +2875,7 @@ static void Onboard_create_Setup(lv_obj_t *parent)
     lv_obj_set_style_text_align(DisableFilteringLabel, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_set_style_text_font(DisableFilteringLabel, &lv_font_montserrat_16, 0);
     char buf[23 + 8];
-    sprintf(buf, "Attitude compensation: %.0f", AttitudeBalanceAlpha * 100);
+    sprintf(buf, "Attitude compensation: %.0f", AttitudeBalanceAlpha * 250);
     lv_label_set_text(DisableFilteringLabel, buf);
     lv_obj_add_style(DisableFilteringLabel, &style_title, LV_STATE_DEFAULT);
 
@@ -3677,13 +3854,13 @@ static void Onboard_create_Attitude(lv_obj_t *parent)
   lv_obj_add_event_cb(parent, speedBgClicked, LV_EVENT_CLICKED, NULL);
 
   lv_obj_t *att_img_top = Onboard_create_Base(parent, &att_circle_top_T);
-  lv_obj_set_pos(att_img_top, 0, -240 + att_circle_top_T.header.h / 2);
+  lv_obj_set_pos(att_img_top, 0, -240);
   // lv_obj_t *att_img_bottom=Onboard_create_Base(parent, &att_circle_top_B);
   // lv_obj_set_pos(att_img_bottom, 0,240-att_circle_top_B.header.h/2);
   lv_obj_t *att_img_tl = Onboard_create_Base(parent, &att_circle_top_TL);
-  lv_obj_set_pos(att_img_tl, -240 + att_circle_top_TL.header.w / 2, 0);
+  lv_obj_set_pos(att_img_tl, -240 + att_circle_top_TL.header.w / 2, -240);
   lv_obj_t *att_img_tr = Onboard_create_Base(parent, &att_circle_top_TR);
-  lv_obj_set_pos(att_img_tr, 240 - att_circle_top_TR.header.w / 2, 0);
+  lv_obj_set_pos(att_img_tr, 240 - att_circle_top_TR.header.w / 2, -240);
 
   Screen_Attitude_Rounds[0] = att_img_top;
   // Screen_Attitude_Rounds[2]=att_img_bottom; // Fixed image does not need any rotation
@@ -3705,6 +3882,33 @@ static void Onboard_create_Attitude(lv_obj_t *parent)
     lv_label_set_text(label, "RB 02");
     lv_obj_add_style(label, &style_title, LV_STATE_DEFAULT);
   }
+
+  // 1.1.16 Warning GPS is used
+#ifdef RB_ENABLE_GPS
+  if (true)
+  {
+    lv_obj_t *label = lv_label_create(parent);
+    lv_obj_set_size(label, 120, 40);
+    lv_obj_align(label, LV_ALIGN_CENTER, 0, -135);
+    lv_obj_set_style_text_font(label, &lv_font_montserrat_16, 0);
+    lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
+    lv_label_set_text(label, "GPS ASSISTED");
+    lv_obj_add_style(label, &style_title, LV_STATE_DEFAULT);
+  }
+#endif
+  // 1.1.13 Warning labels
+  if (true)
+  {
+    lv_obj_t *label = lv_label_create(parent);
+    lv_obj_set_size(label, 96, 40);
+    lv_obj_align(label, LV_ALIGN_CENTER, 0, 215);
+    lv_obj_set_style_text_font(label, &lv_font_montserrat_16, 0);
+    lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
+    lv_label_set_text(label, "NOT CERTIFIED");
+    lv_obj_add_style(label, &style_title, LV_STATE_DEFAULT);
+  }
+
+  // rotate_AttitudeGearByDegree(0);
 }
 
 static void Onboard_create_Altimeter(lv_obj_t *parent)
@@ -3766,6 +3970,41 @@ static void Onboard_create_TurnSlip(lv_obj_t *parent)
 
   lv_obj_align(Screen_TurnSlip_Obj_Turn, LV_ALIGN_CENTER, 0, 0);
   Screen_TurnSlip_Obj_Ball = _screenBall;
+
+  if (true)
+  {
+    lv_obj_t *label = lv_label_create(parent);
+    lv_obj_set_size(label, 150, 40);
+    lv_obj_align(label, LV_ALIGN_CENTER, 0, -100);
+    lv_obj_set_style_text_font(label, &lv_font_montserrat_16, 0);
+    lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
+    lv_label_set_text(label, "GYRO ASSISTED");
+    lv_obj_add_style(label, &style_title, LV_STATE_DEFAULT);
+  }
+
+  if (true)
+  {
+    lv_obj_t *label = lv_label_create(parent);
+    lv_obj_set_size(label, 96, 40);
+    lv_obj_align(label, LV_ALIGN_CENTER, 0, -5);
+    lv_obj_set_style_text_font(label, &lv_font_montserrat_48, 0);
+    lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
+    lv_label_set_text(label, "0");
+
+    Screen_TurnSlip_Obj_Label = label;
+  }
+
+  // 1.1.13 Warning labels
+  if (true)
+  {
+    lv_obj_t *label = lv_label_create(parent);
+    lv_obj_set_size(label, 96, 40);
+    lv_obj_align(label, LV_ALIGN_CENTER, 0, 215);
+    lv_obj_set_style_text_font(label, &lv_font_montserrat_16, 0);
+    lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
+    lv_label_set_text(label, "NOT CERTIFIED");
+    lv_obj_add_style(label, &style_title, LV_STATE_DEFAULT);
+  }
 }
 #ifdef RB_ENABLE_GPS
 static void Onboard_create_Track(lv_obj_t *parent)
@@ -3792,8 +4031,14 @@ static void Onboard_create_Track(lv_obj_t *parent)
     lv_obj_align(label, LV_ALIGN_CENTER, 0, -26);
     lv_obj_set_style_text_font(label, &lv_font_montserrat_16, 0);
     lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
+#ifdef RB_ENABLE_GPS
     lv_label_set_text(label, "GPS TRACK");
+#else
+    lv_label_set_text(label, "GYRO");
+#endif
     lv_obj_add_style(label, &style_title, LV_STATE_DEFAULT);
+
+    Screen_Track_TrackSource = label;
   }
 
   Screen_Track_TrackText = lv_label_create(parent);
@@ -3968,7 +4213,7 @@ static void event_handler_combo_Gyro_LPF(lv_event_t *e)
   lv_obj_t *obj = lv_event_get_target(e);
   if (code == LV_EVENT_VALUE_CHANGED)
   {
-     char buf[32];
+    char buf[32];
     lv_dropdown_get_selected_str(obj, buf, sizeof(buf));
     LV_LOG_USER("Option: %s", buf);
 
@@ -3981,7 +4226,6 @@ static void event_handler_combo_Gyro_LPF(lv_event_t *e)
     if (strcmp(buf, "3LPF") == 0)
       gyro_lpf = LPF_MODE_3;
 
-
     QMI8658_Init();
   }
 }
@@ -3991,7 +4235,7 @@ static void event_handler_combo_Acc_LPF(lv_event_t *e)
   lv_obj_t *obj = lv_event_get_target(e);
   if (code == LV_EVENT_VALUE_CHANGED)
   {
-         char buf[32];
+    char buf[32];
     lv_dropdown_get_selected_str(obj, buf, sizeof(buf));
     LV_LOG_USER("Option: %s", buf);
 
@@ -4004,9 +4248,209 @@ static void event_handler_combo_Acc_LPF(lv_event_t *e)
     if (strcmp(buf, "3LPF") == 0)
       acc_lpf = LPF_MODE_3;
 
-
     QMI8658_Init();
   }
+}
+#endif
+
+#ifdef VIBRATION_TEST
+
+static void Onboard_create_VibrationTest(lv_obj_t *parent)
+{
+
+  Onboard_create_Base(parent, &GMeter);
+
+  if (true)
+  {
+    QMISetRangeGyroCombo = lv_dropdown_create(parent);
+    lv_dropdown_set_options(QMISetRangeGyroCombo, "16DPS\n"
+                                                  "32DPS\n"
+                                                  "64DPS\n"
+                                                  "128DPS\n"
+                                                  "256DPS\n"
+                                                  "512DPS\n"
+                                                  "1024DPS");
+
+    lv_obj_align(QMISetRangeGyroCombo, LV_ALIGN_CENTER, -100, -180);
+    lv_obj_add_event_cb(QMISetRangeGyroCombo, event_handler_combo_Gyro_Rance, LV_EVENT_ALL, NULL);
+    lv_dropdown_set_selected(QMISetRangeGyroCombo, gyro_scale);
+  }
+  if (true)
+  {
+    QMISetODRGyroCombo = lv_dropdown_create(parent);
+    lv_dropdown_set_options(QMISetODRGyroCombo, "8000ODR\n"
+                                                "4000ODR\n"
+                                                "2000ODR\n"
+                                                "1000ODR\n"
+                                                "500ODR\n"
+                                                "250ODR\n"
+                                                "120ODR\n"
+                                                "60ODR\n"
+                                                "30ODR");
+
+    lv_obj_align(QMISetODRGyroCombo, LV_ALIGN_CENTER, 30, -180);
+    lv_obj_add_event_cb(QMISetODRGyroCombo, event_handler_combo_Gyro_ODR, LV_EVENT_ALL, NULL);
+    lv_dropdown_set_selected(QMISetODRGyroCombo, gyro_odr);
+  }
+  if (true)
+  {
+    QMISetLPFGyroCombo = lv_dropdown_create(parent);
+    lv_dropdown_set_options(QMISetLPFGyroCombo, "0LPF\n"
+                                                "1LPF\n"
+                                                "2LPF\n"
+                                                "3LPF");
+
+    lv_obj_align(QMISetLPFGyroCombo, LV_ALIGN_CENTER, 160, -180);
+    lv_obj_add_event_cb(QMISetLPFGyroCombo, event_handler_combo_Gyro_LPF, LV_EVENT_ALL, NULL);
+    lv_dropdown_set_selected(QMISetLPFGyroCombo, gyro_lpf);
+  }
+
+  if (true)
+  {
+    QMISetRangeAccCombo = lv_dropdown_create(parent);
+    lv_dropdown_set_options(QMISetRangeAccCombo, "2G\n"
+                                                 "4G\n"
+                                                 "8G\n"
+                                                 "16G");
+
+    lv_obj_align(QMISetRangeAccCombo, LV_ALIGN_CENTER, -100, -145);
+    lv_obj_add_event_cb(QMISetRangeAccCombo, event_handler_combo_Acc_Rance, LV_EVENT_ALL, NULL);
+    lv_dropdown_set_selected(QMISetRangeAccCombo, acc_scale);
+  }
+  if (true)
+  {
+    QMISetODRACcCombo = lv_dropdown_create(parent);
+    lv_dropdown_set_options(QMISetODRACcCombo, "8000ODR\n"
+                                               "4000ODR\n"
+                                               "2000ODR\n"
+                                               "1000ODR\n"
+                                               "500ODR\n"
+                                               "250ODR\n"
+                                               "120ODR\n"
+                                               "60ODR\n"
+                                               "30ODR");
+
+    lv_obj_align(QMISetODRACcCombo, LV_ALIGN_CENTER, 30, -145);
+    lv_obj_add_event_cb(QMISetODRACcCombo, event_handler_combo_Acc_ODR, LV_EVENT_ALL, NULL);
+    lv_dropdown_set_selected(QMISetODRACcCombo, acc_odr);
+  }
+  if (true)
+  {
+    QMISetLPFAccCombo = lv_dropdown_create(parent);
+    lv_dropdown_set_options(QMISetLPFAccCombo, "0LPF\n"
+                                               "1LPF\n"
+                                               "2LPF\n"
+                                               "3LPF");
+
+    lv_obj_align(QMISetLPFAccCombo, LV_ALIGN_CENTER, 160, -145);
+    lv_obj_add_event_cb(QMISetLPFAccCombo, event_handler_combo_Acc_LPF, LV_EVENT_ALL, NULL);
+    lv_dropdown_set_selected(QMISetLPFAccCombo, acc_lpf);
+  }
+
+  Screen_GMeter_BallGyro = lv_obj_create(parent);
+  lv_obj_set_scrollbar_mode(Screen_GMeter_BallGyro, LV_SCROLLBAR_MODE_OFF);
+  lv_obj_set_size(Screen_GMeter_BallGyro, 32, 32);
+  lv_obj_align(Screen_GMeter_BallGyro, LV_ALIGN_CENTER, 0, 0);
+  lv_obj_set_style_bg_color(Screen_GMeter_BallGyro, lv_color_make(0, 0, 0xff), 0);
+  lv_obj_set_style_radius(Screen_GMeter_BallGyro, LV_RADIUS_CIRCLE, 0);
+
+  if (true)
+  {
+    lv_obj_t *label = lv_label_create(parent);
+    lv_obj_set_size(label, 96, 40);
+    lv_obj_align(label, LV_ALIGN_CENTER, 200, -48);
+    lv_obj_set_style_text_font(label, &lv_font_montserrat_16, 0);
+    lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
+    lv_label_set_text(label, "GYR");
+    lv_obj_add_style(label, &style_title, LV_STATE_DEFAULT);
+  }
+  GMeterLabelGyro = lv_label_create(parent);
+  lv_label_set_text(GMeterLabelGyro, "--");
+  lv_obj_set_size(GMeterLabelGyro, 400, 48);
+  lv_obj_align(GMeterLabelGyro, LV_ALIGN_CENTER, 0, -48);
+  lv_obj_set_style_text_align(GMeterLabelGyro, LV_TEXT_ALIGN_CENTER, 0);
+  lv_obj_set_style_text_font(GMeterLabelGyro, &lv_font_montserrat_48, 0);
+  lv_obj_add_style(GMeterLabelGyro, &style_title, LV_STATE_DEFAULT);
+
+  // lv_obj_align(XXX, LV_ALIGN_CENTER, 0, +48);
+
+  Screen_Vibration_Yaw_Ball = lv_obj_create(parent);
+  lv_obj_set_scrollbar_mode(Screen_Vibration_Yaw_Ball, LV_SCROLLBAR_MODE_OFF);
+  lv_obj_set_size(Screen_Vibration_Yaw_Ball, 32, 32);
+  lv_obj_align(Screen_Vibration_Yaw_Ball, LV_ALIGN_CENTER, 0, 0);
+  lv_obj_set_style_bg_color(Screen_Vibration_Yaw_Ball, lv_color_make(0xff, 0, 0), 0);
+  lv_obj_set_style_radius(Screen_Vibration_Yaw_Ball, LV_RADIUS_CIRCLE, 0);
+
+  Screen_Vibration_Accel_Ball = lv_obj_create(parent);
+  lv_obj_set_scrollbar_mode(Screen_Vibration_Accel_Ball, LV_SCROLLBAR_MODE_OFF);
+  lv_obj_set_size(Screen_Vibration_Accel_Ball, 32, 32);
+  lv_obj_align(Screen_Vibration_Accel_Ball, LV_ALIGN_CENTER, 0, 0);
+  lv_obj_set_style_bg_color(Screen_Vibration_Accel_Ball, lv_color_white(), 0);
+  lv_obj_set_style_radius(Screen_Vibration_Accel_Ball, LV_RADIUS_CIRCLE, 0);
+
+  if (true)
+  {
+    lv_obj_t *label = lv_label_create(parent);
+    lv_obj_set_size(label, 96, 40);
+    lv_obj_align(label, LV_ALIGN_CENTER, 200, 0);
+    lv_obj_set_style_text_font(label, &lv_font_montserrat_16, 0);
+    lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
+    lv_label_set_text(label, "ACC");
+    lv_obj_add_style(label, &style_title, LV_STATE_DEFAULT);
+  }
+  Screen_Vibration_Accel_Label = lv_label_create(parent);
+  lv_label_set_text(Screen_Vibration_Accel_Label, "--");
+  lv_obj_set_size(Screen_Vibration_Accel_Label, 400, 48);
+  lv_obj_align(Screen_Vibration_Accel_Label, LV_ALIGN_CENTER, 0, 0);
+  lv_obj_set_style_text_align(Screen_Vibration_Accel_Label, LV_TEXT_ALIGN_CENTER, 0);
+  lv_obj_set_style_text_font(Screen_Vibration_Accel_Label, &lv_font_montserrat_48, 0);
+  lv_obj_add_style(Screen_Vibration_Accel_Label, &style_title, LV_STATE_DEFAULT);
+
+  if (true)
+  {
+    lv_obj_t *label = lv_label_create(parent);
+    lv_obj_set_size(label, 96, 40);
+    lv_obj_align(label, LV_ALIGN_CENTER, 200, 48 * 2);
+    lv_obj_set_style_text_font(label, &lv_font_montserrat_16, 0);
+    lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
+    lv_label_set_text(label, "IMU");
+    lv_obj_add_style(label, &style_title, LV_STATE_DEFAULT);
+  }
+  Screen_Vibration_IMU_Label = lv_label_create(parent);
+  lv_label_set_text(Screen_Vibration_IMU_Label, "--");
+  lv_obj_set_size(Screen_Vibration_IMU_Label, 400, 48);
+  lv_obj_align(Screen_Vibration_IMU_Label, LV_ALIGN_CENTER, 0, 48 * 2);
+  lv_obj_set_style_text_align(Screen_Vibration_IMU_Label, LV_TEXT_ALIGN_CENTER, 0);
+  lv_obj_set_style_text_font(Screen_Vibration_IMU_Label, &lv_font_montserrat_48, 0);
+  lv_obj_add_style(Screen_Vibration_IMU_Label, &style_title, LV_STATE_DEFAULT);
+
+  Screen_Vibration_GPSAccel_Ball = lv_obj_create(parent);
+  lv_obj_set_scrollbar_mode(Screen_Vibration_GPSAccel_Ball, LV_SCROLLBAR_MODE_OFF);
+  lv_obj_set_size(Screen_Vibration_GPSAccel_Ball, 32, 32);
+  lv_obj_align(Screen_Vibration_GPSAccel_Ball, LV_ALIGN_CENTER, 0, 0);
+  lv_obj_set_style_bg_color(Screen_Vibration_GPSAccel_Ball, lv_color_make(0, 0xff, 0), 0);
+  lv_obj_set_style_radius(Screen_Vibration_GPSAccel_Ball, LV_RADIUS_CIRCLE, 0);
+
+  if (true)
+  {
+    lv_obj_t *label = lv_label_create(parent);
+    lv_obj_set_size(label, 96, 40);
+    lv_obj_align(label, LV_ALIGN_CENTER, 200, 48);
+    lv_obj_set_style_text_font(label, &lv_font_montserrat_16, 0);
+    lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
+    lv_label_set_text(label, "GPS");
+    lv_obj_add_style(label, &style_title, LV_STATE_DEFAULT);
+  }
+
+  Screen_Vibration_GPSAccel_Label = lv_label_create(parent);
+  lv_label_set_text(Screen_Vibration_GPSAccel_Label, "--");
+  lv_obj_set_size(Screen_Vibration_GPSAccel_Label, 400, 48);
+  lv_obj_align(Screen_Vibration_GPSAccel_Label, LV_ALIGN_CENTER, 0, 48);
+  lv_obj_set_style_text_align(Screen_Vibration_GPSAccel_Label, LV_TEXT_ALIGN_CENTER, 0);
+  lv_obj_set_style_text_font(Screen_Vibration_GPSAccel_Label, &lv_font_montserrat_48, 0);
+  lv_obj_add_style(Screen_Vibration_GPSAccel_Label, &style_title, LV_STATE_DEFAULT);
+
+  lv_obj_add_event_cb(parent, speedBgClicked, LV_EVENT_CLICKED, NULL);
 }
 #endif
 
@@ -4027,115 +4471,6 @@ static void Onboard_create_GMeter(lv_obj_t *parent)
   }
 
   lv_obj_add_event_cb(parent, speedBgClicked, LV_EVENT_CLICKED, NULL);
-
-#ifdef VIBRATION_TEST
-
-  if (true)
-  {
-    QMISetRangeGyroCombo = lv_dropdown_create(parent);
-    lv_dropdown_set_options(QMISetRangeGyroCombo, "16DPS\n"
-                                                  "32DPS\n"
-                                                  "64DPS\n"
-                                                  "128DPS\n"
-                                                  "256DPS\n"
-                                                  "512DPS\n"
-                                                  "1024DPS");
-
-    lv_obj_align(QMISetRangeGyroCombo, LV_ALIGN_CENTER, -100, -180);
-    lv_obj_add_event_cb(QMISetRangeGyroCombo, event_handler_combo_Gyro_Rance, LV_EVENT_ALL, NULL);
-    lv_dropdown_set_selected(QMISetRangeGyroCombo, 5);
-  }
-  if (true)
-  {
-    QMISetODRGyroCombo = lv_dropdown_create(parent);
-    lv_dropdown_set_options(QMISetODRGyroCombo, "8000ODR\n"
-                                                "4000ODR\n"
-                                                "2000ODR\n"
-                                                "1000ODR\n"
-                                                "500ODR\n"
-                                                "250ODR\n"
-                                                "120ODR\n"
-                                                "60ODR\n"
-                                                "30ODR");
-
-    lv_obj_align(QMISetODRGyroCombo, LV_ALIGN_CENTER, 30, -180);
-    lv_obj_add_event_cb(QMISetODRGyroCombo, event_handler_combo_Gyro_ODR, LV_EVENT_ALL, NULL);
-    lv_dropdown_set_selected(QMISetODRGyroCombo, 8);
-  }
-  if (true)
-  {
-    QMISetLPFGyroCombo = lv_dropdown_create(parent);
-    lv_dropdown_set_options(QMISetLPFGyroCombo, "0LPF\n"
-                                                "1LPF\n"
-                                                "2LPF\n"
-                                                "3LPF");
-
-    lv_obj_align(QMISetLPFGyroCombo, LV_ALIGN_CENTER, 160, -180);
-    lv_obj_add_event_cb(QMISetLPFGyroCombo, event_handler_combo_Gyro_LPF, LV_EVENT_ALL, NULL);
-    lv_dropdown_set_selected(QMISetLPFGyroCombo, 0);
-  }
-
-  if (true)
-  {
-    QMISetRangeAccCombo = lv_dropdown_create(parent);
-    lv_dropdown_set_options(QMISetRangeAccCombo, "2G\n"
-                                                 "4G\n"
-                                                 "8G\n"
-                                                 "16G");
-
-    lv_obj_align(QMISetRangeAccCombo, LV_ALIGN_CENTER, -100, -145);
-    lv_obj_add_event_cb(QMISetRangeAccCombo, event_handler_combo_Acc_Rance, LV_EVENT_ALL, NULL);
-    lv_dropdown_set_selected(QMISetRangeAccCombo, 1);
-  }
-  if (true)
-  {
-    QMISetODRACcCombo = lv_dropdown_create(parent);
-    lv_dropdown_set_options(QMISetODRACcCombo, "8000ODR\n"
-                                               "4000ODR\n"
-                                               "2000ODR\n"
-                                               "1000ODR\n"
-                                               "500ODR\n"
-                                               "250ODR\n"
-                                               "120ODR\n"
-                                               "60ODR\n"
-                                               "30ODR");
-
-    lv_obj_align(QMISetODRACcCombo, LV_ALIGN_CENTER, 30, -145);
-    lv_obj_add_event_cb(QMISetODRACcCombo, event_handler_combo_Acc_ODR, LV_EVENT_ALL, NULL);
-    lv_dropdown_set_selected(QMISetODRACcCombo, 8);
-  }
-  if (true)
-  {
-    QMISetLPFAccCombo = lv_dropdown_create(parent);
-    lv_dropdown_set_options(QMISetLPFAccCombo, "0LPF\n"
-                                               "1LPF\n"
-                                               "2LPF\n"
-                                               "3LPF");
-
-    lv_obj_align(QMISetLPFAccCombo, LV_ALIGN_CENTER, 160, -145);
-    lv_obj_add_event_cb(QMISetLPFAccCombo, event_handler_combo_Acc_LPF, LV_EVENT_ALL, NULL);
-    lv_dropdown_set_selected(QMISetLPFAccCombo, 0);
-  }
-
-#endif
-
-#ifdef VIBRATION_TEST
-  Screen_GMeter_BallGyro = lv_obj_create(parent);
-  lv_obj_set_scrollbar_mode(Screen_GMeter_BallGyro, LV_SCROLLBAR_MODE_OFF);
-  lv_obj_set_size(Screen_GMeter_BallGyro, 32, 32);
-  lv_obj_align(Screen_GMeter_BallGyro, LV_ALIGN_CENTER, 0, 0);
-  lv_obj_set_style_bg_color(Screen_GMeter_BallGyro, lv_color_make(0, 0, 0xff), 0);
-  lv_obj_set_style_radius(Screen_GMeter_BallGyro, LV_RADIUS_CIRCLE, 0);
-
-  GMeterLabelGyro = lv_label_create(parent);
-  lv_label_set_text(GMeterLabelGyro, "--");
-  lv_obj_set_size(GMeterLabelGyro, 400, 48);
-  lv_obj_align(GMeterLabelGyro, LV_ALIGN_CENTER, 0, -48);
-  lv_obj_set_style_text_align(GMeterLabelGyro, LV_TEXT_ALIGN_CENTER, 0);
-  lv_obj_set_style_text_font(GMeterLabelGyro, &lv_font_montserrat_48, 0);
-  lv_obj_add_style(GMeterLabelGyro, &style_title, LV_STATE_DEFAULT);
-
-#endif
 
   Screen_GMeter_BallMax = lv_obj_create(parent);
   lv_obj_set_scrollbar_mode(Screen_GMeter_BallMax, LV_SCROLLBAR_MODE_OFF);
@@ -4166,10 +4501,6 @@ static void Onboard_create_GMeter(lv_obj_t *parent)
   lv_obj_set_style_text_align(GMeterLabelMax, LV_TEXT_ALIGN_CENTER, 0);
   lv_obj_set_style_text_font(GMeterLabelMax, &lv_font_montserrat_48, 0);
   lv_obj_add_style(GMeterLabelMax, &style_title, LV_STATE_DEFAULT);
-
-#ifdef VIBRATION_TEST
-  lv_obj_align(GMeterLabelMax, LV_ALIGN_CENTER, 0, +48);
-#endif
 }
 void turnOnOffDigitsSymbols(lv_obj_t **segments, uint8_t symbol)
 {
@@ -4414,6 +4745,35 @@ void update_Clock_lvgl_tick(lv_timer_t *t)
   }
 }
 
+#ifdef VIBRATION_TEST
+void update_Vibration_lvgl_tick(lv_timer_t *t)
+{
+  char buf[100];
+  lv_obj_set_pos(Screen_Vibration_GPSAccel_Ball, -220 * GPSLateralYAcceleration / GMeterScale, 220 * GPSAccelerationForAttitudeCompensation / GMeterScale);
+  lv_obj_set_pos(Screen_Vibration_Accel_Ball, -220 * AccelFiltered.y / GMeterScale, 220 * AccelFiltered.x / GMeterScale);
+  lv_obj_set_pos(Screen_GMeter_BallGyro, 220 * (GyroFiltered.z + GyroBias.z + GyroCalibration.z) / GMeterScaleGyro, 220 * (GyroFiltered.y + GyroBias.y + GyroCalibration.y) / GMeterScaleGyro);
+  lv_obj_set_pos(Screen_Vibration_Yaw_Ball, -220 * (GyroFiltered.x + GyroBias.x + GyroCalibration.x) / GMeterScaleGyro, 220 * AccelFiltered.z / GMeterScale);
+  snprintf(buf, sizeof(buf), "%2.0f %2.0f %2.0f", (GyroFiltered.x + GyroBias.x + GyroCalibration.x), (GyroFiltered.y + GyroBias.y + GyroCalibration.y), (GyroFiltered.z + GyroBias.z + GyroCalibration.z));
+  lv_label_set_text(GMeterLabelGyro, buf);
+
+  if (GMeterScaleGyro < GyroFiltered.y)
+    GMeterScaleGyro = (GyroFiltered.y + GyroBias.y + GyroCalibration.y);
+  if (GMeterScaleGyro < GyroFiltered.x)
+    GMeterScaleGyro = (GyroFiltered.x + GyroBias.x + GyroCalibration.x);
+  if (GMeterScaleGyro < GyroFiltered.z)
+    GMeterScaleGyro = (GyroFiltered.z + GyroBias.z + GyroCalibration.z);
+
+  snprintf(buf, sizeof(buf), "%.1f %.1f %.1f", AccelFiltered.x, AccelFiltered.y, AccelFiltered.z);
+  lv_label_set_text(Screen_Vibration_Accel_Label, buf);
+
+  snprintf(buf, sizeof(buf), "%.0f %.0f %.0f", AttitudeRoll, AttitudePitch, AttitudeYaw);
+  lv_label_set_text(Screen_Vibration_IMU_Label, buf);
+
+  snprintf(buf, sizeof(buf), "%.1f %.1f %.0f", GPSAccelerationForAttitudeCompensation, GPSLateralYAcceleration, FusionAHRSDeltaTrackFromGPS);
+  lv_label_set_text(Screen_Vibration_GPSAccel_Label, buf);
+}
+#endif
+
 void update_GMeter_lvgl_tick(lv_timer_t *t)
 {
   lv_obj_set_pos(Screen_GMeter_Ball, -180 * AccelFiltered.y / GMeterScale, 180 * AccelFiltered.x / GMeterScale);
@@ -4432,27 +4792,8 @@ void update_GMeter_lvgl_tick(lv_timer_t *t)
       Buzzer_Off();
     }
   */
-#ifdef VIBRATION_TEST
-
-  lv_obj_set_pos(Screen_GMeter_BallGyro, 220 * (GyroFiltered.z + GyroBias.z + GyroCalibration.z) / GMeterScaleGyro, -220 * (GyroFiltered.y + GyroBias.y + GyroCalibration.y) / GMeterScaleGyro);
-  lv_obj_set_pos(Screen_GMeter_BallMax, -220 * (GyroFiltered.x + GyroBias.x + GyroCalibration.x) / GMeterScaleGyro, 220 * AccelFiltered.z / GMeterScale);
-  snprintf(buf, sizeof(buf), "%2.0f %2.0f %2.0f", (GyroFiltered.x + GyroBias.x + GyroCalibration.x), (GyroFiltered.y + GyroBias.y + GyroCalibration.y), (GyroFiltered.z + GyroBias.z + GyroCalibration.z));
-  lv_label_set_text(GMeterLabelGyro, buf);
-
-  if (GMeterScaleGyro < GyroFiltered.y)
-    GMeterScaleGyro = (GyroFiltered.y + GyroBias.y + GyroCalibration.y);
-  if (GMeterScaleGyro < GyroFiltered.x)
-    GMeterScaleGyro = (GyroFiltered.x + GyroBias.x + GyroCalibration.x);
-  if (GMeterScaleGyro < GyroFiltered.z)
-    GMeterScaleGyro = (GyroFiltered.z + GyroBias.z + GyroCalibration.z);
-
-  snprintf(buf, sizeof(buf), "%.1f %.1f %.1f", AccelFiltered.x, AccelFiltered.y, AccelFiltered.z);
-  lv_label_set_text(GMeterLabelMax, buf);
-
-#else
   // TODO flag MAX Dirty
   lv_obj_set_pos(Screen_GMeter_BallMax, -60 * AccelFilteredMax.y, 60 * AccelFilteredMax.x);
   snprintf(buf, sizeof(buf), "+%.1f %.1f", GFactorMax, GFactorMin);
   lv_label_set_text(GMeterLabelMax, buf);
-#endif
 }
