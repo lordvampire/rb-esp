@@ -2258,6 +2258,8 @@ static void actionInTab(touchLocation location)
     snprintf(buf, sizeof(buf), "%+ld", Variometer);
     lv_label_set_text(Screen_Altitude_Variometer2, buf);
     example1_BMP280_lvgl_tick(NULL);
+    // [ISSUE] with variometer on digital altimeter page #2
+    Variometer = 0;
     break;
   case RB02_TAB_CLK:
     switch (location)

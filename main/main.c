@@ -22,7 +22,7 @@
 #include "BAT_Driver.h"
 
 // 1.1.9
-uint8_t DriverLoopMilliseconds = 50;
+uint8_t DriverLoopMilliseconds = 90;
 
 // 1.0.9 Install in the loop BMP280
 void Get_BMP280(void);   // Declaration
@@ -37,7 +37,8 @@ void Driver_Loop(void *parameter)
         // Delay the polling of certain sensors
         if (loopThreshold == 0)
         {
-            loopThreshold = 100;
+            // 1.1.17 Improving BMP Read, by default the loop is 20Hz and read at 1Hz
+            loopThreshold = 1000/(10+DriverLoopMilliseconds);
             // When sensor is ready (After Calibration)
             if (workflow > 100)
             {
