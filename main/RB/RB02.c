@@ -362,6 +362,7 @@ lv_obj_t *SettingStatus5 = NULL;
 lv_obj_t *SettingStatus4UART = NULL;
 lv_style_t style_title;
 lv_obj_t *SettingLabelFilter = NULL;
+lv_obj_t *SettingsEngineTimeLabel = NULL;
 lv_obj_t *SettingLabelFilterOutput = NULL;
 lv_obj_t *SettingLabelFilterGyro = NULL;
 lv_obj_t *SettingLabelDriverLoopMilliseconds = NULL;
@@ -2112,6 +2113,11 @@ void rb_increase_lvgl_tick(lv_timer_t *t)
     // 1.1.4
     sprintf(buf, "%.1f Volts", BAT_analogVolts);
     lv_label_set_text(SettingStatus4, buf);
+
+    // 1.1.17
+    snprintf(buf, sizeof(buf), "Engine: %d:%02d:%02d",datetime.month*24*31+datetime.day*24+datetime.hour,datetime.minute,datetime.second);
+    lv_label_set_text(SettingsEngineTimeLabel, buf);
+    
 #ifdef RB_ENABLE_GPS
     uart_fetch_data();
 #endif
@@ -2736,7 +2742,22 @@ static void Onboard_create_Setup(lv_obj_t *parent)
     snprintf(hwstring, 20, "%llX", _chipmacid);
     lv_label_set_text(VersionLabel, hwstring);
     lv_obj_add_style(VersionLabel, &style_title, LV_STATE_DEFAULT);
-    lineY += 40;
+    lineY += 30;
+  }
+  // 1.1.17 Engine Time
+  if (true)
+  {
+    lv_obj_t *VersionLabel = lv_label_create(parent);
+    lv_obj_set_size(VersionLabel, 200, 20);
+    lv_obj_align(VersionLabel, LV_ALIGN_CENTER, 0, lineY);
+    lv_obj_set_style_text_font(VersionLabel, &lv_font_montserrat_16, 0);
+    lv_obj_set_style_text_align(VersionLabel, LV_TEXT_ALIGN_CENTER, 0);
+    lv_label_set_text(VersionLabel, "Engine Time:");
+    lv_obj_add_style(VersionLabel, &style_title, LV_STATE_DEFAULT);
+    lineY += 30;
+
+
+    SettingsEngineTimeLabel = VersionLabel;
   }
   // 1.1.6
   if (true)
