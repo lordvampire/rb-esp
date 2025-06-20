@@ -671,6 +671,22 @@ void RB02_Example1(void)
     */
 }
 
+void nmea_GGA_UpdatedValueFor(uint8_t csvCounter, int32_t finalNumber, uint8_t decimalCounter)
+{
+
+  float conversionValue = finalNumber;
+  for (uint8_t c = 0; c < decimalCounter; c++)
+  {
+    conversionValue = conversionValue / 10.0;
+  }
+  switch (csvCounter)
+  {
+  case 9: // ALT MT
+    NMEA_DATA.altitude = (conversionValue+NMEA_DATA.altitude*2.0)/3.0;
+    break;
+  }
+}
+
 #define DEG2RAD (3.14159265359f / 180.0f)
 #define G 9.81f
 void nmea_RMC_UpdatedValueFor(uint8_t csvCounter, int32_t finalNumber, uint8_t decimalCounter)
@@ -688,8 +704,8 @@ void nmea_RMC_UpdatedValueFor(uint8_t csvCounter, int32_t finalNumber, uint8_t d
     break;
   case 1: // UTC hhmmss.ss
     NMEA_DATA.tim.thousand = finalNumber % 100;
-    NMEA_DATA.tim.second = (finalNumber / 100) % 60;
-    NMEA_DATA.tim.minute = (finalNumber / 10000) % 60;
+    NMEA_DATA.tim.second = (finalNumber / 100) % 100;
+    NMEA_DATA.tim.minute = (finalNumber / 10000) % 100;
     NMEA_DATA.tim.hour = (finalNumber / 1000000);
     /* code */
     break;
@@ -838,19 +854,44 @@ bool nmea_GGA_mini_parser(const uint8_t *sentence, uint16_t length)
 {
 
   int8_t csvCounter = 0;
+
+  int8_t decimalCounter = 0;
+  int8_t decimalEnabled = 0;
+  int32_t finalNumber = 0;
+
   for (uint8_t x = 0; x < length; x++)
   {
     if (sentence[x] == 0)
       break;
     if (sentence[x] == ',')
     {
+      nmea_GGA_UpdatedValueFor(csvCounter, finalNumber, decimalCounter);
+      decimalCounter = 0;
       csvCounter++;
+      decimalEnabled = 0;
+      finalNumber = 0;
       continue;
     }
     if (sentence[x] == '\n')
       break;
     if (sentence[x] == '\r')
       break;
+
+    if (sentence[x] == '.')
+    {
+      decimalEnabled = 1;
+      continue;
+    }
+    if (sentence[x] == '-')
+    {
+      finalNumber = finalNumber - 1;
+    }
+    else
+    {
+      decimalCounter += decimalEnabled;
+      finalNumber = 10 * finalNumber + (sentence[x] - '0');
+    }
+
     switch (csvCounter)
     {
     case 0: // GGA
@@ -2023,6 +2064,9 @@ void rb_increase_lvgl_tick(lv_timer_t *t)
     break;
 #endif
   case RB02_TAB_CLK:
+#ifdef RB_ENABLE_GPS
+    uart_fetch_data();
+#endif
     update_Clock_lvgl_tick(t);
     break;
   case RB02_TAB_SET:
@@ -2299,6 +2343,11 @@ static void actionInTab(touchLocation location)
         lv_label_set_text(TimerLabelSE, buf);
         break;
       }
+// 1.1.17 Display UTC Clock on the Timer 3 slot
+#ifdef RB_ENABLE_GPS
+      sprintf(buf, "GPS UTC+0");
+      lv_label_set_text(TimerLabelSE, buf);
+#endif
     }
     break;
     case RB02_TOUCH_S:
@@ -3518,7 +3567,11 @@ static void Onboard_create_Clock(lv_obj_t *parent)
     lv_obj_align(label, LV_ALIGN_CENTER, 95, 150);
     lv_obj_set_style_text_font(label, &lv_font_montserrat_16, 0);
     lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
+#ifdef RB_ENABLE_GPS
+    lv_label_set_text(label, "GPS UTC+0");
+#else
     lv_label_set_text(label, "TIMER 3");
+#endif
     lv_obj_add_style(label, &style_title, LV_STATE_DEFAULT);
 
     TimerLabelSE = label;
@@ -4745,6 +4798,12 @@ void update_Clock_lvgl_tick(lv_timer_t *t)
     lv_label_set_text(TimerSE, buf);
     break;
   }
+
+  // 1.1.17 Display UTC Clock on the Timer 3 slot
+#ifdef RB_ENABLE_GPS
+  sprintf(buf, "%02u:%02u", NMEA_DATA.tim.hour, NMEA_DATA.tim.minute);
+  lv_label_set_text(TimerSE, buf);
+#endif
 }
 
 #ifdef VIBRATION_TEST
