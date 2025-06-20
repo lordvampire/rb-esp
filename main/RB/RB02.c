@@ -918,6 +918,20 @@ bool nmea_GGA_mini_parser(const uint8_t *sentence, uint16_t length)
       Operative_GPS = sentence[x] - '0';
       // printf("GGA: %d\n",sentence[x]-'0');
       break;
+    case 7: // # sats
+      /* code */
+      break;
+
+    case 8: // hdop
+      /* code */
+      break;
+
+    case 9: // alt
+      /* code */
+      break;
+    case 10: // a-units
+      /* code */
+      break;
     default:
       break;
     }
@@ -1969,6 +1983,10 @@ void rb_increase_lvgl_tick(lv_timer_t *t)
     }
     break;
   case RB02_TAB_ALD:
+    // 1.1.17 Add GPS Altimeter
+#ifdef RB_ENABLE_GPS
+    uart_fetch_data();
+#endif
     update_AltimeterDigital_lvgl_tick(t);
     if (Operative_BMP280 && OperativeWarningVisible == true)
     {
@@ -3698,7 +3716,11 @@ static void Onboard_create_AltimeterDigital(lv_obj_t *parent)
     lv_obj_align(label, LV_ALIGN_CENTER, 0, 214);
     lv_obj_set_style_text_font(label, &lv_font_montserrat_16, 0);
     lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
+#ifdef RB_ENABLE_GPS
+    lv_label_set_text(label, "GPS Altitude feet");
+#else
     lv_label_set_text(label, "hPa");
+#endif
     lv_obj_add_style(label, &style_title, LV_STATE_DEFAULT);
   }
   lv_obj_add_event_cb(parent, speedBgClicked, LV_EVENT_CLICKED, NULL);
@@ -4749,8 +4771,13 @@ void update_AltimeterDigital_lvgl_tick(lv_timer_t *t)
   snprintf(buf, sizeof(buf), "%+ld", Variometer);
   lv_label_set_text(Screen_Altitude_Variometer2, buf);
 
+#ifdef RB_ENABLE_GPS
+  snprintf(buf, sizeof(buf), "%.0f", NMEA_DATA.altitude * 3.28084);
+  lv_label_set_text(Screen_Altitude_Pressure, buf);
+#else
   snprintf(buf, sizeof(buf), "%.02f", bmp280Pressure / 100.0);
   lv_label_set_text(Screen_Altitude_Pressure, buf);
+#endif
 }
 
 uint32_t timerDiffByIndex(int st)
