@@ -38,7 +38,7 @@
  */
 #include "RB02.h"
 // 1.1.2 Version is here
-#define RB_VERSION "1.1.16B"
+#define RB_VERSION "1.1.17"
 // 1.1.1 Remove tabs with GPS if not installed
 #define RB_ENABLE_GPS 1
 // #define ENABLE_DEMO_SCREENS 1
@@ -818,7 +818,6 @@ bool nmea_RMC_mini_parser(const uint8_t *sentence, uint16_t length)
       break;
     if (sentence[x] == ',')
     {
-      // printf("%d=%ld/%d\n", csvCounter, finalNumber,decimalCounter);
       nmea_RMC_UpdatedValueFor(csvCounter, finalNumber, decimalCounter);
       decimalCounter = 0;
       csvCounter++;
@@ -2200,7 +2199,7 @@ static void mbox1_event_cb(lv_event_t *e)
         GFactorDirty = 1;
 
 #ifdef VIBRATION_TEST
-        GMeterScaleGyro = 0;
+        GMeterScaleGyro = 15;
 #endif
       }
       lv_msgbox_close(msgbox);
@@ -2735,7 +2734,7 @@ static void Onboard_create_Setup(lv_obj_t *parent)
     lv_obj_set_style_text_align(VersionLabel, LV_TEXT_ALIGN_CENTER, 0);
     lv_label_set_text(VersionLabel, "RB-02");
     lv_obj_add_style(VersionLabel, &style_title, LV_STATE_DEFAULT);
-    lineY += 44;
+    lineY += 40;
   }
   if (true)
   {
@@ -2746,7 +2745,7 @@ static void Onboard_create_Setup(lv_obj_t *parent)
     lv_obj_set_style_text_font(VersionLabel, &lv_font_montserrat_16, 0);
     lv_label_set_text(VersionLabel, "Version " RB_VERSION);
     lv_obj_add_style(VersionLabel, &style_title, LV_STATE_DEFAULT);
-    lineY += 40;
+    lineY += 30;
   }
 
   if (true)

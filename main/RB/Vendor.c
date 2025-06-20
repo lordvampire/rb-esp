@@ -15,6 +15,7 @@ extern uint8_t DriverLoopMilliseconds;
 extern float AttitudeBalanceAlpha;
 extern float FilterMoltiplier;
 extern float FilterMoltiplierGyro;
+extern float FilterMoltiplierOutput;
 
 void nvsStorePCal();
 void nvsStoreSpeedArc();
@@ -26,10 +27,12 @@ void VendorMakeDefaultsDefault()
 
     GMeterScale = 3;
 
-    FilterMoltiplier = 3.0;
-    FilterMoltiplierGyro = 10.0;
-    AttitudeBalanceAlpha = 0.90;
-    DriverLoopMilliseconds = 90;
+    // Example configuration for Limbach engine
+    FilterMoltiplierOutput = 5.0;
+    FilterMoltiplier = 2.0;
+    FilterMoltiplierGyro = 4.0;
+    AttitudeBalanceAlpha = 1.0/230.0;
+    DriverLoopMilliseconds = 40;
 }
 
 #if ENABLE_VENDOR == RB_VENDOR_1

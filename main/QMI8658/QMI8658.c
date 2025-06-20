@@ -30,18 +30,18 @@ float AttitudeYaw = 0;
 float AttitudeYawDegreePerSecond = 0;
 // 1.1.8 Improve reliabilty
 float FilterMoltiplier = 3.0;
-float FilterMoltiplierOutput = 1.0;
+float FilterMoltiplierOutput = 5.0;
 float FilterMoltiplierGyro = 10.0;
 uint16_t lv_atan2(int x, int y);
 // Define complementary filter constant (adjust as needed)
-float AttitudeBalanceAlpha = 0.99;
+float AttitudeBalanceAlpha = 1.0 / 230.0;
 #define DT 0.1 // Time step HZ
 
 uint8_t Device_addr; // default for SD0/SA0 low, 0x6A if high
 acc_scale_t acc_scale = ACC_RANGE_4G;
 gyro_scale_t gyro_scale = GYR_RANGE_64DPS;
 acc_odr_t acc_odr = acc_odr_norm_30;
-gyro_odr_t gyro_odr = gyro_odr_norm_1000;
+gyro_odr_t gyro_odr = gyro_odr_norm_30;
 sensor_state_t sensor_state = sensor_default;
 lpf_t acc_lpf = LPF_MODE_0;
 lpf_t gyro_lpf = LPF_MODE_0;
@@ -106,7 +106,9 @@ void QMI8658_Init(void)
         gyro_odr = nvm_gyro_odr;
         gyro_lpf = nvm_gyro_lpf;
 
-        AttitudeBalanceAlpha = intBuffer / 100.0;
+        AttitudeBalanceAlpha = intBuffer / 250.0;
+
+        nvs_close(my_handle);
     }
 
     setAccScale(acc_scale);
@@ -331,7 +333,11 @@ void setState(sensor_state_t state)
         // enable high speed internal clock,
         // acc and gyro in full mode, and
         // disable syncSample mode
-        QMI8658_transmit(QMI8658_CTRL7, 0x43);
+        //QMI8658_transmit(QMI8658_CTRL7, 0x43);
+
+        // 1.1.17 enable syncSample mode to allow the filter works in sync
+        QMI8658_transmit(QMI8658_CTRL7, 0x83);
+
 
         // disable AttitudeEngine Motion On Demand
         QMI8658_transmit(QMI8658_CTRL6, 0x00);
@@ -389,7 +395,7 @@ void getAccelerometer(void)
 
     AccelFiltered.x = (FilterMoltiplier * AccelFiltered.x + Accel.x) / (FilterMoltiplier + 1.0);
     AccelFiltered.y = (FilterMoltiplier * AccelFiltered.y + Accel.y) / (FilterMoltiplier + 1.0);
-    AccelFiltered.z = (FilterMoltiplier * AccelFiltered.z + Accel.z) / (FilterMoltiplier + 1.0) - GPSAccelerationForAttitudeCompensation;
+    AccelFiltered.z = (FilterMoltiplier * AccelFiltered.z + Accel.z) / (FilterMoltiplier + 1.0);
 }
 
 // Function to calculate roll (bank) from accelerometer
@@ -537,12 +543,24 @@ void getAttitude(void)
         float gy_rad = (GyroFiltered.y + GyroBias.y + GyroCalibration.y) * DEG2RAD;
         float gx_rad = (GyroFiltered.x + GyroBias.x + GyroCalibration.x) * DEG2RAD;
         // No interference between axis but Q output Roll and Pitch output are swapped
+
         Madgwick_UpdateIMU(gy_rad, gz_rad, gx_rad,
-                           AccelFiltered.y + GPSLateralYAcceleration,                // ROLL
+                           AccelFiltered.y - GPSLateralYAcceleration,                // ROLL
                            AccelFiltered.z - GPSAccelerationForAttitudeCompensation, // PITCH
                            AccelFiltered.x                                           // YAW
         );
 
+        // Official setup not working
+        /*
+         Madgwick_UpdateIMU(
+             -gx_rad,
+             -gy_rad,
+             gz_rad,
+             AccelFiltered.z - GPSAccelerationForAttitudeCompensation, // PITCH
+             AccelFiltered.y + GPSLateralYAcceleration,                // ROLL
+             -AccelFiltered.x                                           // YAW
+         );
+        */
         // Interference but Axis are with minus (upside down)
         /*
                       Madgwick_UpdateIMU(gz_rad, gy_rad, gx_rad,
@@ -607,83 +625,18 @@ void getAttitude(void)
         //  3. Get Euler angles
         // Roll and Pitch are swapped
         Madgwick_GetEuler(&AttitudePitch, &AttitudeRoll, &AttitudeYaw);
+        //Madgwick_GetEuler(&AttitudeRoll, &AttitudePitch, &AttitudeYaw);
 
         static float prev_yaw = 0;
         float dt = 0.05f; // 1/20Hz
         float yaw_rate_dps = unwrapAngle(prev_yaw, AttitudeYaw) / dt;
         prev_yaw = AttitudeYaw;
-
         float alpha = 0.01f; // Smoothing factor (0.0–1.0)
         AttitudeYawDegreePerSecond = alpha * yaw_rate_dps + (1.0f - alpha) * AttitudeYawDegreePerSecond;
-
-        // printf("Yaw Corrected: %.1f\n", AttitudeYaw);
-
-        /*
-
-        int16_t YawSamples[20];
-        int16_t YawSum;
-        uint8_t YawSampleCircle = 0;
-
-                float AttitudeYawRettified = AttitudeYaw;
-                if(AttitudeYawRettified>180)AttitudeYawRettified=AttitudeYawRettified-180.0;
-
-
-
-                float Yaw10 = (AttitudeYawRettified) * 10.0;
-                int16_t oldestYawSample = YawSamples[YawSampleCircle];
-                static float lastAttitudeYawDps = 0;
-                float ydps = (AttitudeYawRettified - (oldestYawSample))/20.0;
-
-                AttitudeYawDegreePerSecond = (lastAttitudeYawDps*3.0+ydps)/4.0;
-                YawSamples[YawSampleCircle] = Yaw10;
-                YawSampleCircle = (YawSampleCircle + 1) % 20;
-
-
-
-                float Yaw10 = (AttitudeYaw) * 10.0;
-                int16_t oldestYawSample = YawSamples[YawSampleCircle];
-                static float lastAttitudeYawDps = 0;
-                AttitudeYawDegreePerSecond = (AttitudeYaw + lastAttitudeYawDps -  (oldestYawSample)/10.0)/20.0;
-                lastAttitudeYawDps = (AttitudeYaw + lastAttitudeYawDps -  (oldestYawSample)/10.0);
-                YawSamples[YawSampleCircle] = Yaw10;
-
-
-
-                static float lastAttitudeYaw = 0;
-                float Yaw10 = (AttitudeYaw - lastAttitudeYaw) * 10.0;
-                int16_t oldestYawSample = YawSamples[YawSampleCircle];
-                YawSum = YawSum - oldestYawSample + Yaw10;
-                YawSamples[YawSampleCircle] = Yaw10;
-                YawSampleCircle = (YawSampleCircle + 1) % 20;
-                AttitudeYawDegreePerSecond = -YawSum / 2.5;
-                lastAttitudeYaw = AttitudeYaw;
-                */
-        /*
-        printf("%3d ",YawSum);
-        for(int i=0;i<20;i++){
-printf("%3d",YawSamples[i]);
-        }
-        printf("\n");
-
-
-
-        printf("AX:%3.1f AY:%3.1f AZ:%3.1f GX:%3.1f GY:%3.1f GZ:%3.1f ROLL:%3.1f PITCH:%3.1f YAW:%3.1f V:%3.1f\n",
-         AccelFiltered.z, AccelFiltered.y, -AccelFiltered.x,
-         gz_rad, gy_rad, -gx_rad,
-        AttitudeRoll,AttitudePitch,AttitudeYaw,
-        AttitudeYawDegreePerSecond
-        );
-
-*/
-
         static float LastAttitudeRoll = 0;
         static float LastAttitudePitch = 0;
-
-        // AttitudeRoll = (LastAttitudeRoll * 3 + (AttitudeRoll - 180)) / 4.0;
-        // AttitudePitch = (LastAttitudePitch * 3 - AttitudePitch) / 4.0;
         AttitudeRoll = (LastAttitudeRoll * FilterMoltiplierOutput + (AttitudeRoll)) / (FilterMoltiplierOutput + 1);
         AttitudePitch = (LastAttitudePitch * FilterMoltiplierOutput + AttitudePitch) / (FilterMoltiplierOutput + 1);
-
         LastAttitudeRoll = AttitudeRoll;
         LastAttitudePitch = AttitudePitch;
     }
