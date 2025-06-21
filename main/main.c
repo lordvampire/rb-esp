@@ -7,19 +7,24 @@
 #include "PCF85063.h"
 #include "QMI8658.h"
 #include "ST7701S.h"
+#include "RB02.h"
+#if RB_02_DISPLAY_SIZE == RB_02_DISPLAY_28
 // ESP32-S3-2.8C
 #include "GT911.h"
+#endif
+#if RB_02_DISPLAY_SIZE == RB_02_DISPLAY_21
 // ESP32-S3-2.1C
-// #include "CST820.h"
+#include "CST820.h"
+#endif
 #include "SD_MMC.h"
 #include "LVGL_Driver.h"
 #include "lvgl.h"
 #include "demos/lv_demos.h"
 #include "Buzzer.h"
 #include "BAT_Driver.h"
-#include "RB02.h"
 #include "nvs_flash.h"
 #include "BAT_Driver.h"
+#include "driver/uart.h"
 
 // 1.1.9
 uint8_t DriverLoopMilliseconds = 40;

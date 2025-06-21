@@ -55,7 +55,7 @@ void example_touchpad_read( lv_indev_drv_t * drv, lv_indev_data_t * data )
         data->point.y = touchpad_y[0];
         data->state = LV_INDEV_STATE_PR;
         // ESP_LOGI(LVGL_TAG, "X=%u Y=%u", data->point.x, data->point.y);
-        printf("X=%u Y=%u\n", data->point.x, data->point.y);
+       // printf("X=%u Y=%u\n", data->point.x, data->point.y);
         TouchPadLastX = data->point.x;
         TouchPadLastY = data->point.y;
     } else {

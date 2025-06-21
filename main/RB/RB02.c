@@ -38,12 +38,11 @@
  */
 #include "RB02.h"
 // 1.1.2 Version is here
-#define RB_VERSION "1.1.17"
+#define RB_VERSION "1.1.18"
 // 1.1.1 Remove tabs with GPS if not installed
 #define RB_ENABLE_GPS 1
 // #define ENABLE_DEMO_SCREENS 1
-//  1.1.3 Supports for 2.1 and 2.8 displays
-#define RB_02_DISPLAY_SIZE 28
+
 
 // Images pre-loaded
 #ifdef ENABLE_DEMO_SCREENS
@@ -111,6 +110,12 @@
 #include "nvs_flash.h"
 #include "esp_mac.h"
 #include "esp_sleep.h"
+#include "QMI8658.h"
+#include "driver/uart.h"
+#include "PCF85063.h"
+#define Backlight_MAX   100
+void Set_Backlight(uint8_t Light);
+int64_t esp_timer_get_time(void);
 
 extern uint8_t DriverLoopMilliseconds; // 1.1.9 Anti precession
 extern float BAT_analogVolts;          // 1.1.4 Power management
@@ -1356,6 +1361,10 @@ void update_Attitude_lvgl_tick(lv_timer_t *t)
   if (isAttitudeFast == false)
   {
     rotate_AttitudeGearByDegree(lastAttitudeRoll);
+  }
+  else
+  {
+    lv_img_set_angle(Screen_Attitude_RollIndicator, lastAttitudeRoll * 10.0);
   }
 }
 
@@ -3951,13 +3960,13 @@ static void Onboard_create_Attitude(lv_obj_t *parent)
   lv_obj_add_event_cb(parent, speedBgClicked, LV_EVENT_CLICKED, NULL);
 
   lv_obj_t *att_img_top = Onboard_create_Base(parent, &att_circle_top_T);
-  lv_obj_set_pos(att_img_top, 0, -240);
+  lv_obj_set_pos(att_img_top, 0, -240+att_circle_top_T.header.h / 2);
   // lv_obj_t *att_img_bottom=Onboard_create_Base(parent, &att_circle_top_B);
   // lv_obj_set_pos(att_img_bottom, 0,240-att_circle_top_B.header.h/2);
   lv_obj_t *att_img_tl = Onboard_create_Base(parent, &att_circle_top_TL);
-  lv_obj_set_pos(att_img_tl, -240 + att_circle_top_TL.header.w / 2, -240);
+  lv_obj_set_pos(att_img_tl, -240 + att_circle_top_TL.header.w / 2, -240+att_circle_top_TL.header.h / 2);
   lv_obj_t *att_img_tr = Onboard_create_Base(parent, &att_circle_top_TR);
-  lv_obj_set_pos(att_img_tr, 240 - att_circle_top_TR.header.w / 2, -240);
+  lv_obj_set_pos(att_img_tr, 240 - att_circle_top_TR.header.w / 2, -240+att_circle_top_TR.header.h / 2);
 
   Screen_Attitude_Rounds[0] = att_img_top;
   // Screen_Attitude_Rounds[2]=att_img_bottom; // Fixed image does not need any rotation
@@ -3967,6 +3976,8 @@ static void Onboard_create_Attitude(lv_obj_t *parent)
 
   Screen_Attitude_RollIndicator = Onboard_create_Base(parent, &att_tri);
   lv_obj_set_pos(Screen_Attitude_RollIndicator, 0, -240 + att_tri.header.h / 2);
+  // 1.1.18 Roadmap to new indicator
+ lv_img_set_pivot(Screen_Attitude_RollIndicator, att_tri.header.w / 2, 240);
 
   // 1.1.1 Branding RB-02 on every screen
   if (true)
@@ -4005,7 +4016,8 @@ static void Onboard_create_Attitude(lv_obj_t *parent)
     lv_obj_add_style(label, &style_title, LV_STATE_DEFAULT);
   }
 
-  // rotate_AttitudeGearByDegree(0);
+  // 1.1.18 Roadmap to new indicator
+  //rotate_AttitudeGearByDegree(0);
 }
 
 static void Onboard_create_Altimeter(lv_obj_t *parent)
