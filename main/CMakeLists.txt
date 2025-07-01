@@ -10,9 +10,10 @@ idf_component_register(
                               "QMI8658/QMI8658.c"
                               "SD_Card/SD_MMC.c"
                               "RB/RB02.c"
+                              "RB/RB02_Checklist.c"
+                              "RB/RB02_GPSMap.c"
                               "RB/Vendor.c"
                               "RB/madgwick.c"
-                              "Wireless/Wireless.c"
                               "Buzzer/Buzzer.c"
                               "BAT_Driver/BAT_Driver.c"
 
