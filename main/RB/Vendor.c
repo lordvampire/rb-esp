@@ -23,7 +23,7 @@ void nvsStoreFilters();
 
 void VendorMakeDefaultsDefault()
 {
-    bmp280override = -260;
+    bmp280override = 0;
 
     GMeterScale = 3;
 

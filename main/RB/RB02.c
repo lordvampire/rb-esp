@@ -38,11 +38,11 @@
  */
 #include "RB02.h"
 // 1.1.2 Version is here
-#define RB_VERSION "1.1.18"
+#define RB_VERSION "1.1.19"
 // 1.1.1 Remove tabs with GPS if not installed
 #define RB_ENABLE_GPS 1
+// 1.1.19 Starting getting rid of demo screens
 // #define ENABLE_DEMO_SCREENS 1
-
 
 // Images pre-loaded
 #ifdef ENABLE_DEMO_SCREENS
@@ -51,41 +51,13 @@
 
 #define VIBRATION_TEST 1
 
-#include "RoundAltimeter.c"
+// 1.1.19 Refactoring, images
+#include "RB02Images.c"
 
-#include "RoundGyro.c"
-#include "RoundGyroHeading.c"
-#include "RoundVariometer.c"
-#include "turn_coordinator.c"
-#include "fi_tc_airplane.c"
-#include "horizon_ball.c"
-
-#include "fi_needle.c"
-#include "fi_needle_small.c"
-#include "GMeter.c"
-#include "AttitudeBackground2.c"
-#include "Sky.c"
-#include "AttitudePlain.c"
-#include "AttitudeMiddle.c"
-#ifdef ENABLE_DEMO_SCREENS
-#include "RoundSynthViewSide.c"
-#include "Radar.c"
-#include "RoundMapWithControlledSpaces.c"
-#include "RoundHSI.c"
-#endif
-#include "att_circle_top_TL.c"
-#include "att_circle_top_TR.c"
-#include "att_circle_top_T.c"
-#include "att_circle_middle.c"
-#include "att_middle_big.c"
-#include "att_aircraft.c"
-#include "att_tri.c"
-#include "DigitFont100x25.c"
-#include "DigitFont70x20.c"
-#include "arcRed.c"
-#include "arcYellow.c"
-#include "arcGreen.c"
-#include "arcWhite.c"
+// 1.1.19 GPS MAP
+#include "RB02_NMEA.h"
+#include "RB02_GPSMap.h"
+#include "RB02_Checklist.h"
 
 // 1.1.5 Added Vendor Splashscreen
 #include "Vendor.h"
@@ -113,7 +85,9 @@
 #include "QMI8658.h"
 #include "driver/uart.h"
 #include "PCF85063.h"
-#define Backlight_MAX   100
+#include "RB02_SDCardInject.c"
+
+#define Backlight_MAX 100
 void Set_Backlight(uint8_t Light);
 int64_t esp_timer_get_time(void);
 
@@ -143,92 +117,6 @@ extern uint8_t GFactorDirty;
 #define CONFIG_NMEA_PARSER_UART_RXD 44
 #define CONFIG_NMEA_STATEMENT_RMC 1
 
-#define GPS_MAX_SATELLITES_IN_USE (12)
-#define GPS_MAX_SATELLITES_IN_VIEW (16)
-
-/**
- * @brief GPS fix type
- *
- */
-typedef enum
-{
-  GPS_FIX_INVALID, /*!< Not fixed */
-  GPS_FIX_GPS,     /*!< GPS */
-  GPS_FIX_DGPS,    /*!< Differential GPS */
-} gps_fix_t;
-
-/**
- * @brief GPS fix mode
- *
- */
-typedef enum
-{
-  GPS_MODE_INVALID = 1, /*!< Not fixed */
-  GPS_MODE_2D,          /*!< 2D GPS */
-  GPS_MODE_3D           /*!< 3D GPS */
-} gps_fix_mode_t;
-
-/**
- * @brief GPS satellite information
- *
- */
-typedef struct
-{
-  uint8_t num;       /*!< Satellite number */
-  uint8_t elevation; /*!< Satellite elevation */
-  uint16_t azimuth;  /*!< Satellite azimuth */
-  uint8_t snr;       /*!< Satellite signal noise ratio */
-} gps_satellite_t;
-
-/**
- * @brief GPS time
- *
- */
-typedef struct
-{
-  uint8_t hour;      /*!< Hour */
-  uint8_t minute;    /*!< Minute */
-  uint8_t second;    /*!< Second */
-  uint16_t thousand; /*!< Thousand */
-} gps_time_t;
-
-/**
- * @brief GPS date
- *
- */
-typedef struct
-{
-  uint8_t day;   /*!< Day (start from 1) */
-  uint8_t month; /*!< Month (start from 1) */
-  uint16_t year; /*!< Year (start from 2000) */
-} gps_date_t;
-
-/**
- * @brief GPS object
- *
- */
-typedef struct
-{
-  float latitude;                                                /*!< Latitude (degrees) */
-  float longitude;                                               /*!< Longitude (degrees) */
-  float altitude;                                                /*!< Altitude (meters) */
-  gps_fix_t fix;                                                 /*!< Fix status */
-  uint8_t sats_in_use;                                           /*!< Number of satellites in use */
-  gps_time_t tim;                                                /*!< time in UTC */
-  gps_fix_mode_t fix_mode;                                       /*!< Fix mode */
-  uint8_t sats_id_in_use[GPS_MAX_SATELLITES_IN_USE];             /*!< ID list of satellite in use */
-  float dop_h;                                                   /*!< Horizontal dilution of precision */
-  float dop_p;                                                   /*!< Position dilution of precision  */
-  float dop_v;                                                   /*!< Vertical dilution of precision  */
-  uint8_t sats_in_view;                                          /*!< Number of satellites in view */
-  gps_satellite_t sats_desc_in_view[GPS_MAX_SATELLITES_IN_VIEW]; /*!< Information of satellites in view */
-  gps_date_t date;                                               /*!< Fix date */
-  bool valid;                                                    /*!< GPS validity */
-  float speed;                                                   /*!< Ground speed, unit: m/s */
-  float cog;                                                     /*!< Course over ground */
-  float variation;                                               /*!< Magnetic variation */
-} gps_t;
-
 gps_t NMEA_DATA;
 int16_t AttitudeYawCorrection = 0;
 
@@ -254,8 +142,6 @@ uint8_t EnableAttitudeMadgwick = 1;
 #define DIGIT_BIG_SEGMENTS 7
 #define DIGIT_BIG_DIGIT 4
 #define DIGIT_MINOR_DIGIT 2
-#define SCREEN_HEIGHT 480
-#define SCREEN_WIDTH 480
 #define BMP280_S64_t int64_t
 #define BMP280_U32_t uint32_t
 #define BMP280_S32_t int32_t
@@ -266,6 +152,7 @@ static const int RX_BUF_SIZE = 1024;
 #define UART_N UART_NUM_1
 #endif
 // Prototype declaration
+void lvgl_register_sdcard_fs();
 static lv_obj_t *Onboard_create_Base(lv_obj_t *parent, const lv_img_dsc_t *backgroundImage);
 #ifdef RB_ENABLE_GPS
 static void Onboard_create_Speed(lv_obj_t *parent);
@@ -298,7 +185,6 @@ void uart_fetch_data();
 void nvsStorePCal();
 void nvsStoreUARTBaudrate();
 
-static void CreateDigitArray(lv_obj_t *parent, lv_img_dsc_t *font, int howMany, int dx, int dy);
 static void CreateSingleDigit(lv_obj_t *parent, lv_img_dsc_t *font, lv_obj_t **segments, int dx, int dy);
 void nvsStoreGMeter();
 void nvsRestoreGMeter();
@@ -328,8 +214,7 @@ typedef enum
   RB02_TAB_SYS,
   RB02_TAB_SYN,
   RB02_TAB_RDR,
-  // RB02_TAB_HSI,
-  RB02_TAB_MAP,
+// RB02_TAB_HSI,
 #endif
 #ifdef RB_ENABLE_GPS
   RB02_TAB_SPD,
@@ -340,10 +225,12 @@ typedef enum
   RB02_TAB_TRN,
 #ifdef RB_ENABLE_GPS
   RB02_TAB_TRK,
+  RB02_TAB_MAP,
 #endif
   RB02_TAB_VAR,
   RB02_TAB_GMT,
   RB02_TAB_CLK,
+  RB02_TAB_CHK,
   RB02_TAB_SET,
 #ifdef VIBRATION_TEST
   RB02_TAB_VBR,
@@ -376,6 +263,7 @@ lv_obj_t *SettingAttitudeCompensation = NULL;
 // 1.1.5 Added Vendor Splashscreen
 #ifdef ENABLE_VENDOR
 lv_obj_t *VendorSplashScreenImage = NULL;
+lv_obj_t *lvTabSplashScreen = NULL;
 #endif
 lv_obj_t *Ball = NULL;
 lv_obj_t *Screen_Attitude_Pitch = NULL;
@@ -502,6 +390,8 @@ void ApplyCoding(void)
   // StartupPage = RB02_TAB_ATT;
 }
 
+RB02_GpsMapStatus gpsMapStatus;
+lv_obj_t *t0 = NULL;
 void RB02_Example1(void)
 {
 
@@ -537,8 +427,8 @@ void RB02_Example1(void)
   // 1.1.5 Added Vendor Splashscreen
 #ifdef ENABLE_VENDOR
   lv_obj_t *ts = lv_tabview_add_tab(tv, "RB-02");
-  VendorSplashScreenImage = Onboard_create_Base(ts, &VendorSplashScreen);
   lv_obj_add_event_cb(ts, speedBgClicked, LV_EVENT_CLICKED, NULL);
+  lvTabSplashScreen = ts;
 #endif
 
 #ifdef ENABLE_DEMO_SCREENS
@@ -546,7 +436,7 @@ void RB02_Example1(void)
   lv_obj_t *tz = lv_tabview_add_tab(tv, "SynthBack");
   lv_obj_t *tw = lv_tabview_add_tab(tv, "Radar");
   // lv_obj_t *ty = lv_tabview_add_tab(tv, "HSI");
-  lv_obj_t *t0 = lv_tabview_add_tab(tv, "Map");
+  // lv_obj_t *t0 = lv_tabview_add_tab(tv, "Map");
 #endif
 #ifdef RB_ENABLE_GPS
   lv_obj_t *t1 = lv_tabview_add_tab(tv, "Speed");
@@ -558,14 +448,19 @@ void RB02_Example1(void)
   lv_obj_t *t4 = lv_tabview_add_tab(tv, "TurnSlip");
   // Track backup as Gyroscope Directional
   lv_obj_t *t5 = lv_tabview_add_tab(tv, "Track");
+  t0 = lv_tabview_add_tab(tv, "Map"); // 1.1.19 Last version with demo screens
   lv_obj_t *t6 = lv_tabview_add_tab(tv, "Variometer");
   lv_obj_t *t7 = lv_tabview_add_tab(tv, "GMeter");
 #ifdef RB_ENABLE_GPS
+  // TODO: Rename to TMR
   lv_obj_t *t8 = lv_tabview_add_tab(tv, "Clock");
+  // Add the big analog clock with local time
 #else
   // TODO: Rename to TMR
   lv_obj_t *t8 = lv_tabview_add_tab(tv, "Clock");
 #endif
+  // 1.1.19
+  lv_obj_t *tChecklist = lv_tabview_add_tab(tv, "Checklist");
   lv_obj_t *t9 = lv_tabview_add_tab(tv, "Setup");
 #ifdef VIBRATION_TEST
   lv_obj_t *t10 = lv_tabview_add_tab(tv, "Vibration");
@@ -580,9 +475,13 @@ void RB02_Example1(void)
   Onboard_create_Base(tw, &Radar);
   lv_obj_add_event_cb(tw, speedBgClicked, LV_EVENT_CLICKED, NULL);
   // Onboard_create_Base(ty, &RoundHSI);
-  Onboard_create_Base(t0, &RoundMapWithControlledSpaces);
-  lv_obj_add_event_cb(t0, speedBgClicked, LV_EVENT_CLICKED, NULL);
+  // Onboard_create_Base(t0, &RoundMapWithControlledSpaces);
+  // lv_obj_add_event_cb(t0, speedBgClicked, LV_EVENT_CLICKED, NULL);
 #endif
+
+  // 1.1.19 Map
+  lvgl_register_sdcard_fs();
+
 #ifdef RB_ENABLE_GPS
   Onboard_create_Speed(t1);
 #endif
@@ -592,6 +491,8 @@ void RB02_Example1(void)
   Onboard_create_TurnSlip(t4);
 #ifdef RB_ENABLE_GPS
   Onboard_create_Track(t5);
+  RB02_GPSMap_CreateScreen(&gpsMapStatus, t0);
+  lv_obj_add_event_cb(t0, speedBgClicked, LV_EVENT_CLICKED, NULL);
 #endif
   Onboard_create_Variometer(t6);
   Onboard_create_GMeter(t7);
@@ -604,6 +505,8 @@ void RB02_Example1(void)
 #endif
   printf("$RB,02,%d,%s,%d,%llX\n", RB_02_DISPLAY_SIZE, RB_VERSION, hasGPS, _chipmacid);
 
+  RB02_Checklist_CreateScreen(tChecklist, "/sdcard/check.txt");
+  lv_obj_add_event_cb(tChecklist, speedBgClicked, LV_EVENT_CLICKED, NULL);
   Onboard_create_Setup(t9);
 #ifdef VIBRATION_TEST
   Onboard_create_VibrationTest(t10);
@@ -688,7 +591,7 @@ void nmea_GGA_UpdatedValueFor(uint8_t csvCounter, int32_t finalNumber, uint8_t d
   switch (csvCounter)
   {
   case 9: // ALT MT
-    NMEA_DATA.altitude = (conversionValue+NMEA_DATA.altitude*2.0)/3.0;
+    NMEA_DATA.altitude = (conversionValue + NMEA_DATA.altitude * 2.0) / 3.0;
     break;
   }
 }
@@ -720,12 +623,14 @@ void nmea_RMC_UpdatedValueFor(uint8_t csvCounter, int32_t finalNumber, uint8_t d
     break;
   case 3: // 4311.11936
     /* code */
+    NMEA_DATA.latitude = conversionValue / 100.0;
     break;
   case 4: // N
     /* code */
     break;
   case 5: // 01208.18660
     /* code */
+    NMEA_DATA.longitude = conversionValue / 100.0;
     break;
   case 6: // E
     /* code */
@@ -920,6 +825,7 @@ bool nmea_GGA_mini_parser(const uint8_t *sentence, uint16_t length)
     case 6: // GPS Status
       /* code */
       Operative_GPS = sentence[x] - '0';
+      NMEA_DATA.valid = Operative_GPS > 0 ? true : false;
       // printf("GGA: %d\n",sentence[x]-'0');
       break;
     case 7: // # sats
@@ -1744,6 +1650,42 @@ void rb_check_attitude_inop()
   }
 }
 
+void RB02_CreateScreens()
+{
+#ifdef ENABLE_VENDOR
+  if (VendorSplashScreenImage == NULL)
+  {
+    bool loadInternalSplashscreen = true;
+    if (SDCard_Size > 0)
+    {
+      FILE *f = fopen("/sdcard/SS48016.bmp", "r");
+      if (f == NULL)
+      {
+      }
+      else
+      {
+        fclose(f);
+        f = NULL;
+        lv_obj_t *backgroundImage = lv_img_create(lvTabSplashScreen);
+        lv_img_set_src(backgroundImage, "S:/SS48016.bmp");
+        lv_obj_set_size(backgroundImage, SCREEN_WIDTH, SCREEN_HEIGHT);
+        lv_obj_align(backgroundImage, LV_ALIGN_CENTER, 0, 0);
+        lv_obj_set_scrollbar_mode(backgroundImage, LV_SCROLLBAR_MODE_OFF);
+        lv_obj_set_scrollbar_mode(lvTabSplashScreen, LV_SCROLLBAR_MODE_OFF);
+        // 1.1.9 Remove scrolling for Turbolence touch screen
+        lv_obj_clear_flag(lvTabSplashScreen, LV_OBJ_FLAG_SCROLLABLE);
+        VendorSplashScreenImage = backgroundImage;
+        loadInternalSplashscreen = false;
+      }
+    }
+    if (loadInternalSplashscreen)
+    {
+      VendorSplashScreenImage = Onboard_create_Base(lvTabSplashScreen, &VendorSplashScreen);
+    }
+  }
+#endif
+}
+
 void rb_increase_lvgl_tick(lv_timer_t *t)
 {
   static int stepDown = 50;
@@ -1781,6 +1723,9 @@ void rb_increase_lvgl_tick(lv_timer_t *t)
   {
     switch (workflow)
     {
+    case 2:
+      RB02_CreateScreens();
+      break;
     case 3:
       bmp280Setup();
       break;
@@ -1906,6 +1851,26 @@ void rb_increase_lvgl_tick(lv_timer_t *t)
   case RB02_TAB_SPD:
     uart_fetch_data();
     update_Speed_lvgl_tick(t);
+    if (Operative_GPS && OperativeWarningVisible == true)
+    {
+      lv_obj_add_flag(OperativeWarning, LV_OBJ_FLAG_HIDDEN);
+      OperativeWarningVisible = false;
+    }
+    else
+    {
+      if (Operative_GPS == 0 && OperativeWarningVisible == false)
+      {
+        lv_obj_clear_flag(OperativeWarning, LV_OBJ_FLAG_HIDDEN);
+        OperativeWarningVisible = true;
+      }
+      else
+      {
+      }
+    }
+    break;
+  case RB02_TAB_MAP:
+    uart_fetch_data();
+    RB02_GPSMap_Tick(&gpsMapStatus, &NMEA_DATA, t0);
     if (Operative_GPS && OperativeWarningVisible == true)
     {
       lv_obj_add_flag(OperativeWarning, LV_OBJ_FLAG_HIDDEN);
@@ -2141,9 +2106,9 @@ void rb_increase_lvgl_tick(lv_timer_t *t)
     lv_label_set_text(SettingStatus4, buf);
 
     // 1.1.17
-    snprintf(buf, sizeof(buf), "Engine: %d:%02d:%02d",datetime.month*24*31+datetime.day*24+datetime.hour,datetime.minute,datetime.second);
+    snprintf(buf, sizeof(buf), "Engine: %d:%02d:%02d", datetime.month * 24 * 31 + datetime.day * 24 + datetime.hour, datetime.minute, datetime.second);
     lv_label_set_text(SettingsEngineTimeLabel, buf);
-    
+
 #ifdef RB_ENABLE_GPS
     uart_fetch_data();
 #endif
@@ -2306,6 +2271,19 @@ static void actionInTab(touchLocation location)
       break;
     case RB02_TOUCH_S:
       AttitudeYawCorrection = AttitudeYawCorrection - 10;
+      break;
+    default:
+      break;
+    }
+    break;
+  case RB02_TAB_MAP:
+    switch (location)
+    {
+    case RB02_TOUCH_N:
+      RB02_GPSMap_Touch_N(&gpsMapStatus);
+      break;
+    case RB02_TOUCH_S:
+      RB02_GPSMap_Touch_S(&gpsMapStatus);
       break;
     default:
       break;
@@ -2781,7 +2759,6 @@ static void Onboard_create_Setup(lv_obj_t *parent)
     lv_label_set_text(VersionLabel, "Engine Time:");
     lv_obj_add_style(VersionLabel, &style_title, LV_STATE_DEFAULT);
     lineY += 30;
-
 
     SettingsEngineTimeLabel = VersionLabel;
   }
@@ -3784,59 +3761,6 @@ static void CreateSingleDigit(lv_obj_t *parent, lv_img_dsc_t *font, lv_obj_t **s
     lv_obj_align(segments[y], LV_ALIGN_CENTER, dx + a + x * (j + font->header.h + 4) - 1 / 2 * (j + font->header.h + 4), dy + b);
   }
 }
-static void CreateDigitArray(lv_obj_t *parent, lv_img_dsc_t *font, int howMany, int dx, int dy)
-{
-
-  int16_t k = DigitFont100x25.header.w / 2;
-  int16_t j = DigitFont100x25.header.w;
-
-  for (int x = 0; x < howMany; x++)
-  {
-    for (int y = 0; y < DIGIT_BIG_SEGMENTS; y++)
-    {
-      SegmentsA[x][y] = Onboard_create_Base(parent, &DigitFont100x25);
-      int16_t a = 0;
-      int16_t b = 0;
-      switch (y)
-      {
-      case 0:
-        a = 0;
-        b = 0;
-        break;
-      case 1:
-        a = 0;
-        b = -j;
-        break;
-      case 2:
-        a = 0;
-        b = j;
-        break;
-      case 3:
-        a = -k;
-        b = j / 2;
-        lv_img_set_angle(SegmentsA[x][y], 900);
-        break;
-      case 4:
-        lv_img_set_angle(SegmentsA[x][y], 900);
-        a = k;
-        b = j / 2;
-        break;
-      case 5:
-        lv_img_set_angle(SegmentsA[x][y], 900);
-        a = k;
-        b = -j / 2;
-        break;
-      case 6:
-        lv_img_set_angle(SegmentsA[x][y], 900);
-        a = -k;
-        b = -j / 2;
-        break;
-      }
-
-      lv_obj_align(SegmentsA[x][y], LV_ALIGN_CENTER, a + x * (j + DigitFont100x25.header.h + 4) - howMany / 2 * (j + DigitFont100x25.header.h + 4), b);
-    }
-  }
-}
 
 void draw_arch(lv_obj_t *parent, const lv_img_dsc_t *t, uint16_t degreeStartSlide, uint16_t degreeEndSlide)
 {
@@ -3960,13 +3884,13 @@ static void Onboard_create_Attitude(lv_obj_t *parent)
   lv_obj_add_event_cb(parent, speedBgClicked, LV_EVENT_CLICKED, NULL);
 
   lv_obj_t *att_img_top = Onboard_create_Base(parent, &att_circle_top_T);
-  lv_obj_set_pos(att_img_top, 0, -240+att_circle_top_T.header.h / 2);
+  lv_obj_set_pos(att_img_top, 0, -240 + att_circle_top_T.header.h / 2);
   // lv_obj_t *att_img_bottom=Onboard_create_Base(parent, &att_circle_top_B);
   // lv_obj_set_pos(att_img_bottom, 0,240-att_circle_top_B.header.h/2);
   lv_obj_t *att_img_tl = Onboard_create_Base(parent, &att_circle_top_TL);
-  lv_obj_set_pos(att_img_tl, -240 + att_circle_top_TL.header.w / 2, -240+att_circle_top_TL.header.h / 2);
+  lv_obj_set_pos(att_img_tl, -240 + att_circle_top_TL.header.w / 2, -240 + att_circle_top_TL.header.h / 2);
   lv_obj_t *att_img_tr = Onboard_create_Base(parent, &att_circle_top_TR);
-  lv_obj_set_pos(att_img_tr, 240 - att_circle_top_TR.header.w / 2, -240+att_circle_top_TR.header.h / 2);
+  lv_obj_set_pos(att_img_tr, 240 - att_circle_top_TR.header.w / 2, -240 + att_circle_top_TR.header.h / 2);
 
   Screen_Attitude_Rounds[0] = att_img_top;
   // Screen_Attitude_Rounds[2]=att_img_bottom; // Fixed image does not need any rotation
@@ -3977,7 +3901,7 @@ static void Onboard_create_Attitude(lv_obj_t *parent)
   Screen_Attitude_RollIndicator = Onboard_create_Base(parent, &att_tri);
   lv_obj_set_pos(Screen_Attitude_RollIndicator, 0, -240 + att_tri.header.h / 2);
   // 1.1.18 Roadmap to new indicator
- lv_img_set_pivot(Screen_Attitude_RollIndicator, att_tri.header.w / 2, 240);
+  lv_img_set_pivot(Screen_Attitude_RollIndicator, att_tri.header.w / 2, 240);
 
   // 1.1.1 Branding RB-02 on every screen
   if (true)
@@ -4017,7 +3941,7 @@ static void Onboard_create_Attitude(lv_obj_t *parent)
   }
 
   // 1.1.18 Roadmap to new indicator
-  //rotate_AttitudeGearByDegree(0);
+  // rotate_AttitudeGearByDegree(0);
 }
 
 static void Onboard_create_Altimeter(lv_obj_t *parent)
@@ -4367,7 +4291,21 @@ static void event_handler_combo_Acc_LPF(lv_event_t *e)
 static void Onboard_create_VibrationTest(lv_obj_t *parent)
 {
 
-  Onboard_create_Base(parent, &GMeter);
+  // Onboard_create_Base(parent, &GMeter); // 1.1.19
+  for (int i = 3; i > 0; i--)
+  {
+    if (true)
+    {
+      lv_obj_t *GMeterCircle = lv_obj_create(parent);
+      lv_obj_set_scrollbar_mode(GMeterCircle, LV_SCROLLBAR_MODE_OFF);
+      lv_obj_set_size(GMeterCircle, 480 / 4 * i, 480 / 4 * i);
+      lv_obj_align(GMeterCircle, LV_ALIGN_CENTER, 0, 0);
+      lv_obj_set_style_bg_color(GMeterCircle, lv_color_black(), 0);
+      lv_obj_set_style_radius(GMeterCircle, LV_RADIUS_CIRCLE, 0);
+      lv_obj_clear_flag(GMeterCircle, LV_OBJ_FLAG_CLICKABLE);
+    }
+  }
+  lv_obj_clear_flag(parent, LV_OBJ_FLAG_SCROLLABLE);
 
   if (true)
   {
@@ -4565,7 +4503,8 @@ static void Onboard_create_VibrationTest(lv_obj_t *parent)
 
 static void Onboard_create_GMeter(lv_obj_t *parent)
 {
-  Onboard_create_Base(parent, &GMeter);
+  // Onboard_create_Base(parent, &GMeter);
+  lv_obj_clear_flag(parent, LV_OBJ_FLAG_SCROLLABLE);
 
   // 1.1.1 Branding RB-02 on every screen
   if (true)
@@ -4577,6 +4516,20 @@ static void Onboard_create_GMeter(lv_obj_t *parent)
     lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
     lv_label_set_text(label, "RB 02");
     lv_obj_add_style(label, &style_title, LV_STATE_DEFAULT);
+  }
+
+  for (int i = 3; i > 0; i--)
+  {
+    if (true)
+    {
+      lv_obj_t *GMeterCircle = lv_obj_create(parent);
+      lv_obj_set_scrollbar_mode(GMeterCircle, LV_SCROLLBAR_MODE_OFF);
+      lv_obj_set_size(GMeterCircle, 480 / 4 * i, 480 / 4 * i);
+      lv_obj_align(GMeterCircle, LV_ALIGN_CENTER, 0, 0);
+      lv_obj_set_style_bg_color(GMeterCircle, lv_color_black(), 0);
+      lv_obj_set_style_radius(GMeterCircle, LV_RADIUS_CIRCLE, 0);
+      lv_obj_clear_flag(GMeterCircle, LV_OBJ_FLAG_CLICKABLE);
+    }
   }
 
   lv_obj_add_event_cb(parent, speedBgClicked, LV_EVENT_CLICKED, NULL);
@@ -4778,7 +4731,6 @@ void update_AltimeterDigital_lvgl_tick(lv_timer_t *t)
   char buf[10];
   // 1.0.9 Variometer is *100 and 1Hz
   // Variometer => 0.01 Feet/Second => *60/100 => Feet/min
-  int32_t VariometerFeetMin = Variometer * 6.0 / 10.0;
   snprintf(buf, sizeof(buf), "%+ld", Variometer);
   lv_label_set_text(Screen_Altitude_Variometer2, buf);
 
