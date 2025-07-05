@@ -56,9 +56,16 @@
 
 // 1.1.19 GPS MAP
 #include "RB02_NMEA.h"
+#ifdef RB_ENABLE_MAP
 #include "RB02_GPSMap.h"
-#include "RB02_Checklist.h"
+#endif
 
+#ifdef RB_ENABLE_CHECKLIST
+#include "RB02_Checklist.h"
+#endif
+#ifdef RB_ENABLE_AAT
+#include "RB02_AAttitude.h"
+#endif
 // 1.1.5 Added Vendor Splashscreen
 #include "Vendor.h"
 
@@ -185,7 +192,7 @@ void uart_fetch_data();
 void nvsStorePCal();
 void nvsStoreUARTBaudrate();
 
-static void CreateSingleDigit(lv_obj_t *parent, lv_img_dsc_t *font, lv_obj_t **segments, int dx, int dy);
+static void CreateSingleDigit(lv_obj_t *parent, const lv_img_dsc_t *font, lv_obj_t **segments, int dx, int dy);
 void nvsStoreGMeter();
 void nvsRestoreGMeter();
 
@@ -220,17 +227,24 @@ typedef enum
   RB02_TAB_SPD,
 #endif
   RB02_TAB_ATT,
+#ifdef RB_ENABLE_AAT
+  RB02_TAB_AAT,
+#endif
   RB02_TAB_ALT,
   RB02_TAB_ALD,
   RB02_TAB_TRN,
 #ifdef RB_ENABLE_GPS
   RB02_TAB_TRK,
+#ifdef RB_ENABLE_MAP
   RB02_TAB_MAP,
+#endif
 #endif
   RB02_TAB_VAR,
   RB02_TAB_GMT,
   RB02_TAB_CLK,
+#ifdef RB_ENABLE_CHECKLIST
   RB02_TAB_CHK,
+#endif
   RB02_TAB_SET,
 #ifdef VIBRATION_TEST
   RB02_TAB_VBR,
@@ -299,7 +313,7 @@ uint8_t selectedTimer = 0;
 datetime_t datetimeTimer1 = {0};
 datetime_t datetimeTimer2 = {0};
 datetime_t datetimeTimer3 = {0};
-lv_res_t Screen_TurnSlip_Obj_Ball_Size = SCREEN_HEIGHT / 12;
+const lv_res_t Screen_TurnSlip_Obj_Ball_Size = SCREEN_HEIGHT / 12;
 lv_obj_t *Screen_TurnSlip_Obj_Ball = NULL;
 lv_obj_t *Screen_TurnSlip_Obj_Label = NULL;
 lv_obj_t *Screen_TurnSlip_Obj_Turn = NULL;
@@ -390,8 +404,10 @@ void ApplyCoding(void)
   // StartupPage = RB02_TAB_ATT;
 }
 
+#ifdef RB_ENABLE_MAP
 RB02_GpsMapStatus gpsMapStatus;
 lv_obj_t *t0 = NULL;
+#endif
 void RB02_Example1(void)
 {
 
@@ -442,13 +458,18 @@ void RB02_Example1(void)
   lv_obj_t *t1 = lv_tabview_add_tab(tv, "Speed");
 #endif
   lv_obj_t *t2 = lv_tabview_add_tab(tv, "Attitude");
+#ifdef RB_ENABLE_AAT
+  advancedAttitude_Status.lv_parent = lv_tabview_add_tab(tv, "Advanced");
+#endif
 
   lv_obj_t *t3 = lv_tabview_add_tab(tv, "Altimeter");
   lv_obj_t *t3b = lv_tabview_add_tab(tv, "Altimeter");
   lv_obj_t *t4 = lv_tabview_add_tab(tv, "TurnSlip");
   // Track backup as Gyroscope Directional
   lv_obj_t *t5 = lv_tabview_add_tab(tv, "Track");
+#ifdef RB_ENABLE_MAP
   t0 = lv_tabview_add_tab(tv, "Map"); // 1.1.19 Last version with demo screens
+#endif
   lv_obj_t *t6 = lv_tabview_add_tab(tv, "Variometer");
   lv_obj_t *t7 = lv_tabview_add_tab(tv, "GMeter");
 #ifdef RB_ENABLE_GPS
@@ -460,7 +481,9 @@ void RB02_Example1(void)
   lv_obj_t *t8 = lv_tabview_add_tab(tv, "Clock");
 #endif
   // 1.1.19
+#ifdef RB_ENABLE_CHECKLIST
   lv_obj_t *tChecklist = lv_tabview_add_tab(tv, "Checklist");
+#endif
   lv_obj_t *t9 = lv_tabview_add_tab(tv, "Setup");
 #ifdef VIBRATION_TEST
   lv_obj_t *t10 = lv_tabview_add_tab(tv, "Vibration");
@@ -491,8 +514,10 @@ void RB02_Example1(void)
   Onboard_create_TurnSlip(t4);
 #ifdef RB_ENABLE_GPS
   Onboard_create_Track(t5);
+#ifdef RB_ENABLE_MAP
   RB02_GPSMap_CreateScreen(&gpsMapStatus, t0);
   lv_obj_add_event_cb(t0, speedBgClicked, LV_EVENT_CLICKED, NULL);
+#endif
 #endif
   Onboard_create_Variometer(t6);
   Onboard_create_GMeter(t7);
@@ -504,9 +529,10 @@ void RB02_Example1(void)
   hasGPS = 1;
 #endif
   printf("$RB,02,%d,%s,%d,%llX\n", RB_02_DISPLAY_SIZE, RB_VERSION, hasGPS, _chipmacid);
-
+#ifdef RB_ENABLE_CHECKLIST
   RB02_Checklist_CreateScreen(tChecklist, "/sdcard/check.txt");
   lv_obj_add_event_cb(tChecklist, speedBgClicked, LV_EVENT_CLICKED, NULL);
+#endif
   Onboard_create_Setup(t9);
 #ifdef VIBRATION_TEST
   Onboard_create_VibrationTest(t10);
@@ -1315,13 +1341,20 @@ void update_TurnSlip_lvgl_tick(lv_timer_t *t)
     fay = 1.1;
 
   char buf[10];
-  if (ydpg > 0)
+  if (ydpg > 1)
   {
     snprintf(buf, sizeof(buf), "%.0f", ydpg);
   }
   else
   {
-    snprintf(buf, sizeof(buf), "%.0f", -ydpg);
+    if (ydpg < -1)
+    {
+      snprintf(buf, sizeof(buf), "%.0f", -ydpg);
+    }
+    else
+    {
+      buf[0]=0;
+    }
   }
 
   if (ydpg < -10)
@@ -1684,6 +1717,11 @@ void RB02_CreateScreens()
     }
   }
 #endif
+#ifdef RB_ENABLE_AAT
+
+  RB02_AdvancedAttitude_CreateScreen(&advancedAttitude_Status, &att_aircraft, &att_tri);
+  lv_obj_add_event_cb(advancedAttitude_Status.lv_parent, speedBgClicked, LV_EVENT_CLICKED, NULL);
+#endif
 }
 
 void rb_increase_lvgl_tick(lv_timer_t *t)
@@ -1847,6 +1885,34 @@ void rb_increase_lvgl_tick(lv_timer_t *t)
 
   switch (((lv_tabview_t *)tv)->tab_cur)
   {
+
+#ifdef RB_ENABLE_AAT
+  case RB02_TAB_AAT:
+#ifdef RB_ENABLE_GPS
+    uart_fetch_data();
+#endif
+    RB02_AdvancedAttitude_Tick(&advancedAttitude_Status, &NMEA_DATA, Altimeter, QNH, Variometer);
+    if (Operative_GPS && OperativeWarningVisible == true)
+    {
+      lv_obj_add_flag(OperativeWarning, LV_OBJ_FLAG_HIDDEN);
+      OperativeWarningVisible = false;
+    }
+    else
+    {
+      if (Operative_GPS == 0 && OperativeWarningVisible == false)
+      {
+        // For demo purposes!
+        // lv_obj_clear_flag(OperativeWarning, LV_OBJ_FLAG_HIDDEN);
+        // OperativeWarningVisible = true;
+      }
+      else
+      {
+      }
+    }
+    break;
+    break;
+#endif
+
 #ifdef RB_ENABLE_GPS
   case RB02_TAB_SPD:
     uart_fetch_data();
@@ -1868,6 +1934,7 @@ void rb_increase_lvgl_tick(lv_timer_t *t)
       }
     }
     break;
+#ifdef RB_ENABLE_MAP
   case RB02_TAB_MAP:
     uart_fetch_data();
     RB02_GPSMap_Tick(&gpsMapStatus, &NMEA_DATA, t0);
@@ -1888,6 +1955,7 @@ void rb_increase_lvgl_tick(lv_timer_t *t)
       }
     }
     break;
+#endif
 #endif
   case RB02_TAB_TRK:
 #ifdef RB_ENABLE_GPS
@@ -2276,6 +2344,7 @@ static void actionInTab(touchLocation location)
       break;
     }
     break;
+#ifdef RB_ENABLE_MAP
   case RB02_TAB_MAP:
     switch (location)
     {
@@ -2289,6 +2358,7 @@ static void actionInTab(touchLocation location)
       break;
     }
     break;
+#endif
   case RB02_TAB_ALT:
   case RB02_TAB_ALD:
     switch (location)
@@ -2385,6 +2455,9 @@ static void actionInTab(touchLocation location)
 
   case RB02_TAB_VBR:
   case RB02_TAB_TRN:
+#ifdef RB_ENABLE_AAT
+  case RB02_TAB_AAT:
+#endif
   case RB02_TAB_ATT:
     switch (location)
     {
@@ -3711,7 +3784,7 @@ static void Onboard_create_AltimeterDigital(lv_obj_t *parent)
   lv_obj_add_event_cb(parent, speedBgClicked, LV_EVENT_CLICKED, NULL);
 }
 
-static void CreateSingleDigit(lv_obj_t *parent, lv_img_dsc_t *font, lv_obj_t **segments, int dx, int dy)
+static void CreateSingleDigit(lv_obj_t *parent, const lv_img_dsc_t *font, lv_obj_t **segments, int dx, int dy)
 {
   int16_t k = font->header.w / 2;
   int16_t j = font->header.w;
@@ -3768,9 +3841,6 @@ void draw_arch(lv_obj_t *parent, const lv_img_dsc_t *t, uint16_t degreeStartSlid
   {
 
     int16_t sin = lv_trigo_sin(degree - 90) / 327;
-    int16_t cos = lv_trigo_sin(degree) / 327;
-
-    uint32_t y = (sin) * 32 / 100;
 
     lv_obj_t *slice = lv_img_create(parent);
     lv_img_set_src(slice, t);
