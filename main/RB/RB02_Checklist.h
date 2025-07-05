@@ -12,4 +12,6 @@
 #include "lvgl.h"
 #include "RB02.h"
 
+#ifdef RB_ENABLE_CHECKLIST
 lv_obj_t *RB02_Checklist_CreateScreen(lv_obj_t *parent, char * filename);
+#endif

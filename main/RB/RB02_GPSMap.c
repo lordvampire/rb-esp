@@ -7,6 +7,7 @@
  */
 
 #include "RB02_GPSMap.h"
+#ifdef RB_ENABLE_MAP
 #include "lvgl.h"
 #include <stdio.h>
 #ifdef RB_02_ENABLE_INTERNALMAP
@@ -358,3 +359,4 @@ void RB02_GPSMap_Tick(RB02_GpsMapStatus *gpsMapStatus, gps_t *gpsStatus, lv_obj_
            gpsMapStatus->mapLongitudeEnd,
            gpsMapStatus->mapLongitudeBegin);
 }
+#endif

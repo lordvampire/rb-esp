@@ -12,6 +12,7 @@ idf_component_register(
                               "RB/RB02.c"
                               "RB/RB02_Checklist.c"
                               "RB/RB02_GPSMap.c"
+                              "RB/RB02_AAttitude.c"
                               "RB/Vendor.c"
                               "RB/madgwick.c"
                               "Buzzer/Buzzer.c"

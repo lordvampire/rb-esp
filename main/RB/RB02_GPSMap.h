@@ -13,6 +13,7 @@
 #include "RB02_NMEA.h"
 #include "RB02.h"
 
+#ifdef RB_ENABLE_MAP
 #ifdef RB_02_ENABLE_EXTERNALMAP
 #define RB_02_ENABLE_EXTERNALMAP_WIDTH 30 // Maximun zoom out
 #endif
@@ -43,3 +44,4 @@ lv_obj_t *RB02_GPSMap_CreateScreen(RB02_GpsMapStatus *gpsMapStatus, lv_obj_t *pa
 void RB02_GPSMap_Tick(RB02_GpsMapStatus *gpsMapStatus, gps_t *gpsStatus,lv_obj_t *parent);
 void RB02_GPSMap_Touch_N(RB02_GpsMapStatus *gpsMapStatus);
 void RB02_GPSMap_Touch_S(RB02_GpsMapStatus *gpsMapStatus);
+#endif

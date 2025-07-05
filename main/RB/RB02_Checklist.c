@@ -9,6 +9,7 @@
  * 03 -> Autopilot, ADSB, Radio, Flight Computer
  */
 #include "RB02_Checklist.h"
+#ifdef RB_ENABLE_CHECKLIST
 #include <stdio.h>
 
 extern lv_style_t style_title;
@@ -76,3 +77,4 @@ lv_obj_t *RB02_Checklist_CreateScreen(lv_obj_t *parent, char *path)
     }
     return NULL;
 }
+#endif
