@@ -117,78 +117,155 @@ void RB02_AdvancedAttitude_Tick(RB02_AdvancedAttitude_Status *aaStatus, gps_t *g
 
     int32_t AltimeterInFeet = Altimeter / 100.0;
 
-    snprintf(buf, sizeof(buf), "%ld", AltimeterInFeet);
-    lv_label_set_text(aaStatus->lv_altimeter, buf);
+    if (aaStatus->Altimeter != AltimeterInFeet)
+    {
+        aaStatus->Altimeter = AltimeterInFeet;
+        snprintf(buf, sizeof(buf), "%ld", AltimeterInFeet);
+        lv_label_set_text(aaStatus->lv_altimeter, buf);
+
+        int16_t degreeAltimeterInFeet = RB_AAT_START_RIGHT_ARC - RB02_AdvancedAttitude_ProgressBoth(aaStatus, AltimeterInFeet, 0, 10000);
+        RB02_AdvancedAttitude_MoveItems(aaStatus->lv_altimeter, degreeAltimeterInFeet);
+        RB02_AdvancedAttitude_MoveItems(aaStatus->lv_altimeter_background, degreeAltimeterInFeet);
+
+        for (int position = 0; position < RB_AAT_ARC_NUMBERS; position++)
+        {
+            if (AltimeterInFeet / 500 > position)
+            {
+                lv_obj_clear_flag(aaStatus->lv_right_arcs[position], LV_OBJ_FLAG_HIDDEN);
+            }
+            else
+            {
+                lv_obj_add_flag(aaStatus->lv_right_arcs[position], LV_OBJ_FLAG_HIDDEN);
+            }
+        }
+    }
 
     float isKt = 1.852;
     if (isKmh == 1)
     {
         isKt = 1.0;
     }
-    snprintf(buf, sizeof(buf), "%.0f", gpsStatus->speed / isKt); // KT
-    lv_label_set_text(aaStatus->lv_speed, buf);
+    int16_t speedValue = gpsStatus->speed / isKt;
 
-    snprintf(buf, sizeof(buf), "%+ld", Variometer);
-    lv_label_set_text(aaStatus->lv_variometer, buf);
-
-    snprintf(buf, sizeof(buf), "%.1f", GFactor);
-    lv_label_set_text(aaStatus->lv_gmeter, buf);
-
-    if (AttitudeYawDegreePerSecond > 1)
+    if (aaStatus->Speed != speedValue)
     {
-        snprintf(buf, sizeof(buf), "%.0fR", AttitudeYawDegreePerSecond);
+        aaStatus->Speed = speedValue;
+        snprintf(buf, sizeof(buf), "%d", speedValue);
+        lv_label_set_text(aaStatus->lv_speed, buf);
+
+        int16_t degreeSpeed = RB_AAT_START_LEFT_ARC + RB02_AdvancedAttitude_ProgressBoth(aaStatus, gpsStatus->speed, speedKtStart, speedKtEnd);
+        RB02_AdvancedAttitude_MoveItems(aaStatus->lv_speed, degreeSpeed);
+        RB02_AdvancedAttitude_MoveItems(aaStatus->lv_speed_background, degreeSpeed);
     }
-    else
+
+    if (aaStatus->Variometer != Variometer)
     {
-        if (AttitudeYawDegreePerSecond < -1)
+        aaStatus->Variometer = Variometer;
+        snprintf(buf, sizeof(buf), "%+ld", Variometer);
+        lv_label_set_text(aaStatus->lv_variometer, buf);
+
+        if (Variometer > 0)
         {
-            snprintf(buf, sizeof(buf), "%.0fL", AttitudeYawDegreePerSecond);
+            for (int position = 0; position < RB_AAT_ARC_NUMBERS / 2; position++)
+            {
+                lv_obj_add_flag(aaStatus->lv_right_arcs2[position], LV_OBJ_FLAG_HIDDEN);
+            }
+            for (int position = RB_AAT_ARC_NUMBERS / 2; position < RB_AAT_ARC_NUMBERS; position++)
+            {
+                if ((Variometer / 100) > position - RB_AAT_ARC_NUMBERS / 2)
+                {
+                    lv_obj_clear_flag(aaStatus->lv_right_arcs2[position], LV_OBJ_FLAG_HIDDEN);
+                }
+                else
+                {
+                    lv_obj_add_flag(aaStatus->lv_right_arcs2[position], LV_OBJ_FLAG_HIDDEN);
+                }
+            }
         }
         else
         {
-            buf[0] = 0;
+            for (int position = 0; position >= RB_AAT_ARC_NUMBERS / 2; position++)
+            {
+                lv_obj_add_flag(aaStatus->lv_right_arcs2[position], LV_OBJ_FLAG_HIDDEN);
+            }
+            for (int position = RB_AAT_ARC_NUMBERS / 2; position >=0; position--)
+            {
+                if (-1*(Variometer / 100) > (RB_AAT_ARC_NUMBERS / 2-position))
+                {
+                    lv_obj_clear_flag(aaStatus->lv_right_arcs2[position], LV_OBJ_FLAG_HIDDEN);
+                }
+                else
+                {
+                    lv_obj_add_flag(aaStatus->lv_right_arcs2[position], LV_OBJ_FLAG_HIDDEN);
+                }
+            }
         }
     }
-    lv_label_set_text(aaStatus->lv_gyro, buf);
-    snprintf(buf, sizeof(buf), "%ld", QNH);
-    lv_label_set_text(aaStatus->lv_qnh, buf);
 
-    snprintf(buf, sizeof(buf), "%.0f°", gpsStatus->cog);
-    lv_label_set_text(aaStatus->lv_track, buf);
-
-    int16_t degreeSpeed = RB_AAT_START_LEFT_ARC + RB02_AdvancedAttitude_ProgressBoth(aaStatus, gpsStatus->speed, speedKtStart, speedKtEnd);
-    RB02_AdvancedAttitude_MoveItems(aaStatus->lv_speed, degreeSpeed);
-    RB02_AdvancedAttitude_MoveItems(aaStatus->lv_speed_background, degreeSpeed);
-    int16_t degreeAltimeterInFeet = RB_AAT_START_RIGHT_ARC - RB02_AdvancedAttitude_ProgressBoth(aaStatus, AltimeterInFeet, 0, 10000);
-    RB02_AdvancedAttitude_MoveItems(aaStatus->lv_altimeter, degreeAltimeterInFeet);
-    RB02_AdvancedAttitude_MoveItems(aaStatus->lv_altimeter_background, degreeAltimeterInFeet);
-
-    RB02_AdvancedAttitude_RollPitchAlign(aaStatus, AttitudePitch, AttitudeRoll);
-
-    for (int position = 0; position < RB_AAT_ARC_NUMBERS; position++)
+    if (aaStatus->GFactor != GFactor * 10)
     {
-        if (AltimeterInFeet / 500 > position)
+        aaStatus->GFactor = GFactor * 10;
+        snprintf(buf, sizeof(buf), "%.1f", GFactor);
+        lv_label_set_text(aaStatus->lv_gmeter, buf);
+    }
+
+    if (aaStatus->AttitudeYawDegreePerSecond != AttitudeYawDegreePerSecond)
+    {
+        aaStatus->AttitudeYawDegreePerSecond = AttitudeYawDegreePerSecond;
+        if (AttitudeYawDegreePerSecond > 1)
         {
-            lv_obj_clear_flag(aaStatus->lv_right_arcs[position], LV_OBJ_FLAG_HIDDEN);
+            snprintf(buf, sizeof(buf), "%.0fR", AttitudeYawDegreePerSecond);
         }
         else
         {
-            lv_obj_add_flag(aaStatus->lv_right_arcs[position], LV_OBJ_FLAG_HIDDEN);
+            if (AttitudeYawDegreePerSecond < -1)
+            {
+                snprintf(buf, sizeof(buf), "%.0fL", AttitudeYawDegreePerSecond);
+            }
+            else
+            {
+                buf[0] = 0;
+            }
         }
+
+        if (AttitudeYawDegreePerSecond > 0)
+        {
+            lv_obj_set_size(aaStatus->lv_gyro_pink, (AttitudeYawDegreePerSecond * 10), 16);
+            lv_obj_align(aaStatus->lv_gyro_pink, LV_ALIGN_CENTER, -(AttitudeYawDegreePerSecond * 10 / 2), 165);
+        }
+        else
+        {
+            lv_obj_set_size(aaStatus->lv_gyro_pink, (-AttitudeYawDegreePerSecond * 10), 16);
+            lv_obj_align(aaStatus->lv_gyro_pink, LV_ALIGN_CENTER, -(AttitudeYawDegreePerSecond * 10 / 2), 165);
+        }
+        lv_label_set_text(aaStatus->lv_gyro, buf);
     }
 
-    if (AttitudeYawDegreePerSecond > 0)
+    if (aaStatus->QNH != QNH)
     {
-        lv_obj_set_size(aaStatus->lv_gyro_pink, (AttitudeYawDegreePerSecond * 10), 16);
-        lv_obj_align(aaStatus->lv_gyro_pink, LV_ALIGN_CENTER, -(AttitudeYawDegreePerSecond * 10 / 2), 165);
-    }
-    else
-    {
-        lv_obj_set_size(aaStatus->lv_gyro_pink, (-AttitudeYawDegreePerSecond * 10), 16);
-        lv_obj_align(aaStatus->lv_gyro_pink, LV_ALIGN_CENTER, -(AttitudeYawDegreePerSecond * 10 / 2), 165);
+        aaStatus->QNH = QNH;
+        snprintf(buf, sizeof(buf), "%ld", QNH);
+        lv_label_set_text(aaStatus->lv_qnh, buf);
     }
 
-    RB02_AdvancedAttitude_MoveBall(aaStatus->lv_ball, 180 + AccelFiltered.y * 45);
+    if (aaStatus->Track != gpsStatus->cog)
+    {
+        aaStatus->Track = gpsStatus->cog;
+        snprintf(buf, sizeof(buf), "%.0f°", gpsStatus->cog);
+        lv_label_set_text(aaStatus->lv_track, buf);
+    }
+
+    if (aaStatus->AttitudePitch != AttitudePitch)
+    {
+        aaStatus->AttitudePitch = AttitudePitch;
+        RB02_AdvancedAttitude_RollPitchAlign(aaStatus, AttitudePitch, AttitudeRoll);
+    }
+
+    if (aaStatus->BallFactor != AccelFiltered.y * 10)
+    {
+        aaStatus->BallFactor = AccelFiltered.y * 10;
+        RB02_AdvancedAttitude_MoveBall(aaStatus->lv_ball, 180 + AccelFiltered.y * 45);
+    }
 }
 
 lv_color16_t RB02_AdvancedAttitude_GenerateColorAtIndexLeft(int index, int32_t value)
@@ -258,6 +335,17 @@ lv_obj_t *RB02_AdvancedAttitude_CreateArcSlice(lv_obj_t *parent, lv_color16_t co
 lv_obj_t *RB02_AdvancedAttitude_CreateScreen(RB02_AdvancedAttitude_Status *aaStatus, const lv_img_dsc_t *AircraftIndicatorMiddle, const lv_img_dsc_t *AircraftIndicatorTop)
 {
 
+    aaStatus->Altimeter = 1;
+    aaStatus->QNH = 1;
+    aaStatus->Variometer = 1;
+    aaStatus->GFactor = 0;
+    aaStatus->AttitudeYawDegreePerSecond = 1;
+    aaStatus->BallFactor = 1;
+    aaStatus->AttitudePitch = 1;
+    aaStatus->AttitudeRoll = 1;
+    aaStatus->Speed = 1;
+    aaStatus->Track = 1;
+
     if (aaStatus->lv_parent != NULL)
     {
         lv_obj_t *backgroundImage = lv_img_create(aaStatus->lv_parent);
@@ -296,6 +384,14 @@ lv_obj_t *RB02_AdvancedAttitude_CreateScreen(RB02_AdvancedAttitude_Status *aaSta
         lv_obj_add_flag(aaStatus->lv_right_arcs[position], LV_OBJ_FLAG_HIDDEN);
     }
 
+    // TODO: Shallbe unified with altimeter
+    for (int position = 0; position < RB_AAT_ARC_NUMBERS; position++)
+    {
+        uint16_t degree = RB_AAT_START_RIGHT_ARC - RB_AAT_ARC_SIZE * position;
+        aaStatus->lv_right_arcs2[position] = RB02_AdvancedAttitude_CreateArcSlice(aaStatus->lv_parent, lv_color_make(255, 0, 255), degree);
+        lv_obj_add_flag(aaStatus->lv_right_arcs2[position], LV_OBJ_FLAG_HIDDEN);
+    }
+
     if (aaStatus->lv_parent != NULL)
     {
         lv_obj_t *white = lv_obj_create(aaStatus->lv_parent);
@@ -321,7 +417,7 @@ lv_obj_t *RB02_AdvancedAttitude_CreateScreen(RB02_AdvancedAttitude_Status *aaSta
     {
         lv_obj_t *label = lv_label_create(aaStatus->lv_parent);
         lv_obj_set_size(label, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
-        lv_obj_align(label, LV_ALIGN_CENTER, 155, -10);
+        lv_obj_align(label, LV_ALIGN_CENTER, 170, -10);
         lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
         lv_obj_set_style_text_font(label, &lv_font_montserrat_16, 0);
         lv_obj_set_style_text_color(label, lv_color_black(), 0);
@@ -332,7 +428,7 @@ lv_obj_t *RB02_AdvancedAttitude_CreateScreen(RB02_AdvancedAttitude_Status *aaSta
     {
         lv_obj_t *label = lv_label_create(aaStatus->lv_parent);
         lv_obj_set_size(label, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
-        lv_obj_align(label, LV_ALIGN_CENTER, -155, -10);
+        lv_obj_align(label, LV_ALIGN_CENTER, -170, -10);
         lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
         lv_obj_set_style_text_font(label, &lv_font_montserrat_16, 0);
         lv_obj_set_style_text_color(label, lv_color_black(), 0);
@@ -350,9 +446,9 @@ lv_obj_t *RB02_AdvancedAttitude_CreateScreen(RB02_AdvancedAttitude_Status *aaSta
     {
         lv_obj_t *label = lv_label_create(aaStatus->lv_parent);
         lv_obj_set_size(label, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
-        lv_obj_align(label, LV_ALIGN_CENTER, -160, 10);
+        lv_obj_align(label, LV_ALIGN_CENTER, -170, 16);
         lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
-        lv_obj_set_style_text_font(label, &lv_font_montserrat_16, 0);
+        lv_obj_set_style_text_font(label, &lv_font_montserrat_32, 0);
         lv_obj_set_style_text_color(label, lv_color_white(), 0);
 
         lv_obj_set_style_border_color(label, lv_color_black(), 0);
@@ -363,11 +459,20 @@ lv_obj_t *RB02_AdvancedAttitude_CreateScreen(RB02_AdvancedAttitude_Status *aaSta
 
     if (aaStatus->lv_parent != NULL)
     {
+        lv_obj_t *roundTile = lv_obj_create(aaStatus->lv_parent);
+        lv_obj_set_size(roundTile, 80, 28);
+        lv_obj_align(roundTile, LV_ALIGN_CENTER, -105, 190);
+        lv_obj_set_style_border_color(roundTile, lv_color_black(), 0);
+        lv_obj_set_style_bg_color(roundTile, lv_color_black(), 0);
+    }
+
+    if (aaStatus->lv_parent != NULL)
+    {
         lv_obj_t *label = lv_label_create(aaStatus->lv_parent);
         lv_obj_set_size(label, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
-        lv_obj_align(label, LV_ALIGN_CENTER, -120, 190);
+        lv_obj_align(label, LV_ALIGN_CENTER, -105, 190);
         lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
-        lv_obj_set_style_text_font(label, &lv_font_montserrat_16, 0);
+        lv_obj_set_style_text_font(label, &lv_font_montserrat_32, 0);
         lv_obj_set_style_text_color(label, lv_color_white(), 0);
 
         lv_obj_set_style_border_color(label, lv_color_black(), 0);
@@ -375,14 +480,21 @@ lv_obj_t *RB02_AdvancedAttitude_CreateScreen(RB02_AdvancedAttitude_Status *aaSta
 
         aaStatus->lv_gyro = label;
     }
-
+    if (aaStatus->lv_parent != NULL)
+    {
+        lv_obj_t *roundTile = lv_obj_create(aaStatus->lv_parent);
+        lv_obj_set_size(roundTile, 80, 28);
+        lv_obj_align(roundTile, LV_ALIGN_CENTER, 105, 190);
+        lv_obj_set_style_border_color(roundTile, lv_color_black(), 0);
+        lv_obj_set_style_bg_color(roundTile, lv_color_black(), 0);
+    }
     if (aaStatus->lv_parent != NULL)
     {
         lv_obj_t *label = lv_label_create(aaStatus->lv_parent);
         lv_obj_set_size(label, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
-        lv_obj_align(label, LV_ALIGN_CENTER, 120, 190);
+        lv_obj_align(label, LV_ALIGN_CENTER, 105, 190);
         lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
-        lv_obj_set_style_text_font(label, &lv_font_montserrat_16, 0);
+        lv_obj_set_style_text_font(label, &lv_font_montserrat_32, 0);
         lv_obj_set_style_text_color(label, lv_color_white(), 0);
 
         lv_obj_set_style_border_color(label, lv_color_black(), 0);
@@ -444,6 +556,14 @@ lv_obj_t *RB02_AdvancedAttitude_CreateScreen(RB02_AdvancedAttitude_Status *aaSta
 
         aaStatus->lv_speed = label;
     }
+    if (aaStatus->lv_parent != NULL)
+    {
+        lv_obj_t *roundTile = lv_obj_create(aaStatus->lv_parent);
+        lv_obj_set_size(roundTile, 80, 28);
+        lv_obj_align(roundTile, LV_ALIGN_CENTER, 0, 185);
+        lv_obj_set_style_border_color(roundTile, lv_color_black(), 0);
+        lv_obj_set_style_bg_color(roundTile, lv_color_black(), 0);
+    }
 
     if (aaStatus->lv_parent != NULL)
     {
@@ -451,7 +571,7 @@ lv_obj_t *RB02_AdvancedAttitude_CreateScreen(RB02_AdvancedAttitude_Status *aaSta
         lv_obj_set_size(label, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
         lv_obj_align(label, LV_ALIGN_CENTER, 4, 185);
         lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
-        lv_obj_set_style_text_font(label, &lv_font_montserrat_16, 0);
+        lv_obj_set_style_text_font(label, &lv_font_montserrat_32, 0);
         lv_obj_set_style_text_color(label, lv_color_white(), 0);
 
         lv_obj_set_style_border_color(label, lv_color_black(), 0);
@@ -464,9 +584,9 @@ lv_obj_t *RB02_AdvancedAttitude_CreateScreen(RB02_AdvancedAttitude_Status *aaSta
     {
         lv_obj_t *label = lv_label_create(aaStatus->lv_parent);
         lv_obj_set_size(label, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
-        lv_obj_align(label, LV_ALIGN_CENTER, 160, 10);
+        lv_obj_align(label, LV_ALIGN_CENTER, 170, 16);
         lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
-        lv_obj_set_style_text_font(label, &lv_font_montserrat_16, 0);
+        lv_obj_set_style_text_font(label, &lv_font_montserrat_32, 0);
         lv_obj_set_style_text_color(label, lv_color_white(), 0);
 
         lv_obj_set_style_border_color(label, lv_color_black(), 0);

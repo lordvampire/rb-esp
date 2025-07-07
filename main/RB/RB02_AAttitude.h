@@ -34,7 +34,17 @@ typedef struct
     lv_obj_t *lv_ball;
     lv_obj_t *lv_left_arcs[RB_AAT_ARC_NUMBERS];
     lv_obj_t *lv_right_arcs[RB_AAT_ARC_NUMBERS];
-    
+    lv_obj_t *lv_right_arcs2[RB_AAT_ARC_NUMBERS];
+    int32_t Altimeter;
+    int32_t QNH;
+    int32_t Variometer;
+    int8_t GFactor;
+    int8_t AttitudeYawDegreePerSecond;
+    int8_t BallFactor;
+    int8_t AttitudePitch;
+    int8_t AttitudeRoll;
+    int16_t Speed;
+    int16_t Track;
 } RB02_AdvancedAttitude_Status;
 
 

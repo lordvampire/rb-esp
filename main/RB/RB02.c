@@ -2359,6 +2359,9 @@ static void actionInTab(touchLocation location)
     }
     break;
 #endif
+#ifdef RB_ENABLE_AAT
+  case RB02_TAB_AAT:
+#endif
   case RB02_TAB_ALT:
   case RB02_TAB_ALD:
     switch (location)
@@ -2368,6 +2371,9 @@ static void actionInTab(touchLocation location)
       break;
     case RB02_TOUCH_S:
       QNH--;
+      break;
+    case RB02_TOUCH_CENTER:
+      lv_att_reset_msgbox();
       break;
     default:
       break;
@@ -2455,9 +2461,6 @@ static void actionInTab(touchLocation location)
 
   case RB02_TAB_VBR:
   case RB02_TAB_TRN:
-#ifdef RB_ENABLE_AAT
-  case RB02_TAB_AAT:
-#endif
   case RB02_TAB_ATT:
     switch (location)
     {
