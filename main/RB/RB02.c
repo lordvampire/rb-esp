@@ -1,12 +1,28 @@
 /**
- * Copyright (c) 2024 XIAPROJECTS SRL
- * Distributable under the terms of The "BSD New" License
- * that can be found in the LICENSE file, herein included
- * as part of this header.
+ * This file is part of RB.
+ *
+ * Copyright (C) 2024 XIAPROJECTS SRL
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as published
+ * by the Free Software Foundation, version 3.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU Affero General Public License for more details.
+ *
+ * You should have received a copy of the GNU Affero General Public License
+ * along with this program. If not, see <https://www.gnu.org/licenses/>.
+
  * This source is part of the project RB:
- * 01 -> Display 2.8" with Synthetic vision, Autopilot and ADSB
- * 02 -> Display 2.8" with SixPack
- * 03 -> Autopilot, ADSB, Radio, Flight Computer
+ * 01 -> Display with Synthetic vision, Autopilot and ADSB
+ * 02 -> Display with SixPack
+ * 03 -> Display with Autopilot, ADSB, Radio, Flight Computer
+ * 04 -> Display with EMS: Engine monitoring system
+ *
+ * Community edition will be free for all builders and personal use as defined by the licensing model
+ * Dual licensing for commercial agreement is available
  *
  * Starting from version 1.1.3 both of displays are supported: 2.8 and 2.1
  *
@@ -38,7 +54,7 @@
  */
 #include "RB02.h"
 // 1.1.2 Version is here
-#define RB_VERSION "1.1.19"
+#define RB_VERSION "1.1.23 DIAG"
 // 1.1.1 Remove tabs with GPS if not installed
 #define RB_ENABLE_GPS 1
 // 1.1.19 Starting getting rid of demo screens
@@ -54,10 +70,16 @@
 // 1.1.19 Refactoring, images
 #include "RB02Images.c"
 
+#include "RB02_Altimeter.h"
+
 // 1.1.19 GPS MAP
 #include "RB02_NMEA.h"
 #ifdef RB_ENABLE_MAP
 #include "RB02_GPSMap.h"
+#endif
+
+#ifdef RB_ENABLE_GPS
+#include "RB02_GPSDiag.h"
 #endif
 
 #ifdef RB_ENABLE_CHECKLIST
@@ -165,7 +187,7 @@ static lv_obj_t *Onboard_create_Base(lv_obj_t *parent, const lv_img_dsc_t *backg
 static void Onboard_create_Speed(lv_obj_t *parent);
 #endif
 static void Onboard_create_Attitude(lv_obj_t *parent);
-static void Onboard_create_Altimeter(lv_obj_t *parent);
+
 static void Onboard_create_AltimeterDigital(lv_obj_t *parent);
 static void Onboard_create_TurnSlip(lv_obj_t *parent);
 static void Onboard_create_Clock(lv_obj_t *parent);
@@ -249,6 +271,9 @@ typedef enum
 #ifdef VIBRATION_TEST
   RB02_TAB_VBR,
 #endif
+#ifdef RB_ENABLE_GPS
+  RB02_TAB_GDG,
+#endif
   RB02_TAB_DEV
 } tabs;
 
@@ -266,6 +291,13 @@ lv_obj_t *SettingStatus3 = NULL;
 lv_obj_t *SettingStatus4 = NULL;
 lv_obj_t *SettingStatus5 = NULL;
 lv_obj_t *SettingStatus4UART = NULL;
+extern lv_obj_t *GPSDiag_NMEADebugLine;
+extern lv_obj_t *GPSDiag_UARTBaud;
+extern lv_obj_t *GPSDiag_NMEADebugRMC;
+extern lv_obj_t *GPSDiag_NMEADebugGGA;
+extern lv_obj_t *GPSDiag_NMEADebugSummary;
+
+// char SettingStatus4UARTBuf[20];
 lv_style_t style_title;
 lv_obj_t *SettingLabelFilter = NULL;
 lv_obj_t *SettingsEngineTimeLabel = NULL;
@@ -285,10 +317,10 @@ lv_obj_t *Screen_Attitude_RollIndicator = NULL;
 void *Screen_Attitude_Rounds[4];
 uint16_t QNH = 1013;
 lv_obj_t *Screen_Gyro_Gear = NULL;
-lv_obj_t *Screen_Altitude_Miles = NULL;
-lv_obj_t *Screen_Altitude_Cents = NULL;
+extern lv_obj_t *Screen_Altitude_Miles;
+extern lv_obj_t *Screen_Altitude_Cents;
 lv_obj_t *Screen_Variometer_Cents = NULL;
-lv_obj_t *Screen_Altitude_QNH = NULL;
+extern lv_obj_t *Screen_Altitude_QNH;
 lv_obj_t *Screen_Altitude_QNH2 = NULL;
 lv_obj_t *Screen_Altitude_Variometer2 = NULL;
 lv_obj_t *Screen_Altitude_Pressure = NULL;
@@ -400,8 +432,9 @@ touchLocation getTouchLocation(lv_coord_t x, lv_coord_t y)
 
 void ApplyCoding(void)
 {
-  DeviceIsDemoMode = 1;
-  // StartupPage = RB02_TAB_ATT;
+  // 1.1.23 Removing Default Demo Version
+  DeviceIsDemoMode = 0;
+  StartupPage = RB02_TAB_AAT;
 }
 
 #ifdef RB_ENABLE_MAP
@@ -489,6 +522,11 @@ void RB02_Example1(void)
   lv_obj_t *t10 = lv_tabview_add_tab(tv, "Vibration");
 #else
 #endif
+
+#ifdef RB_ENABLE_GPS
+  lv_obj_t *tGPSDiag = lv_tabview_add_tab(tv, "GPS Diag");
+#endif
+
   // lv_obj_t *t10 = lv_tabview_add_tab(tv, "Demo");
 #ifdef ENABLE_DEMO_SCREENS
   Onboard_create_Base(tu, &RoundSynthViewSide);
@@ -509,7 +547,9 @@ void RB02_Example1(void)
   Onboard_create_Speed(t1);
 #endif
   Onboard_create_Attitude(t2);
-  Onboard_create_Altimeter(t3);
+  RB02_Altimeter_CreateScreen(t3);
+  lv_obj_add_event_cb(t3, speedBgClicked, LV_EVENT_CLICKED, NULL);
+
   Onboard_create_AltimeterDigital(t3b);
   Onboard_create_TurnSlip(t4);
 #ifdef RB_ENABLE_GPS
@@ -537,6 +577,10 @@ void RB02_Example1(void)
 #ifdef VIBRATION_TEST
   Onboard_create_VibrationTest(t10);
 #else
+#endif
+
+#ifdef RB_ENABLE_GPS
+  RB02_GPSDiag_CreateScreen(tGPSDiag);
 #endif
 
   // Onboard_create(t10);
@@ -604,6 +648,20 @@ void RB02_Example1(void)
     lv_obj_clear_flag(tv, LV_OBJ_FLAG_SCROLL_CHAIN_VER);
     lv_obj_clear_flag(lv_tabview_get_content(tv), LV_OBJ_FLAG_SCROLLABLE);
     */
+}
+
+lv_obj_t *RB_LV_Helper_CreateImageFromFile(lv_obj_t *parent, const void *backgroundImageName)
+{
+
+  lv_obj_t *backgroundImage = lv_img_create(parent);
+  lv_img_set_src(backgroundImage, backgroundImageName);
+  lv_obj_set_size(backgroundImage, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+  lv_obj_align(backgroundImage, LV_ALIGN_CENTER, 0, 0);
+  lv_obj_set_scrollbar_mode(backgroundImage, LV_SCROLLBAR_MODE_OFF);
+  lv_obj_set_scrollbar_mode(parent, LV_SCROLLBAR_MODE_OFF);
+  // 1.1.9 Remove scrolling for Turbolence touch screen
+  lv_obj_clear_flag(parent, LV_OBJ_FLAG_SCROLLABLE);
+  return backgroundImage;
 }
 
 void nmea_GGA_UpdatedValueFor(uint8_t csvCounter, int32_t finalNumber, uint8_t decimalCounter)
@@ -895,12 +953,15 @@ void uart_fetch_data()
     }
     printf("\n");
     */
+    // Debug UART
+    // snprintf(SettingStatus4UARTBuf,sizeof(SettingStatus4UARTBuf),"%s",data);
+    lv_label_set_text(GPSDiag_NMEADebugLine, (char *)data);
     for (int x = 0; x < rxBytes - 23; x++)
     {
       //$GPRMC,,,,,,,,,,,,A*79
       if (data[x] == '$')
       {
-        if (strncmp((char *)(data + x + 1), "GPRMC,", 5) == 0)
+        if (strncmp((char *)(data + x + 1), "GPRMC,", 5) == 0 || strncmp((char *)(data + x + 1), "GNRMC,", 5) == 0)
         {
           lv_label_set_text(SettingStatus4UART, "DATA RECEIVED");
           if (nmea_RMC_mini_parser(data + x, rxBytes - x))
@@ -908,11 +969,15 @@ void uart_fetch_data()
             // TODO: jump directly to the slice
             // break;
           }
+          if (GPSDiag_NMEADebugRMC != NULL)
+          {
+            lv_label_set_text(GPSDiag_NMEADebugRMC, (char *)(data + x));
+          }
           // break; // Fast as possibile we go back and do not parse anymore
         }
         else
         {
-          if (strncmp((char *)(data + x + 1), "GPGGA,", 5) == 0)
+          if (strncmp((char *)(data + x + 1), "GPGGA,", 5) == 0 || strncmp((char *)(data + x + 1), "GNGGA,", 5) == 0)
           {
             if (nmea_GGA_mini_parser(data + x, rxBytes - x))
             {
@@ -920,6 +985,10 @@ void uart_fetch_data()
               // break;
             }
             // break; // Fast as possibile we go back and do not parse anymore
+            if (GPSDiag_NMEADebugGGA != NULL)
+            {
+              lv_label_set_text(GPSDiag_NMEADebugGGA, (char *)(data + x));
+            }
           }
         }
       }
@@ -934,6 +1003,14 @@ void uart_fetch_data()
     {
       Operative_GPS = false;
     }
+  }
+
+  if(GPSDiag_NMEADebugSummary != NULL){
+    int64_t now = esp_timer_get_time();
+    int64_t isGPSTimeout = (now - GPSLastSpeedKmhReceivedTick);
+    int16_t isGPSTimeoutDeciseconds = isGPSTimeout / 100000;
+snprintf((char *)data,RX_BUF_SIZE,"Parsed: %d %d %.1f %.1f %1.f",isGPSTimeoutDeciseconds,NMEA_DATA.valid,NMEA_DATA.speed,NMEA_DATA.cog,NMEA_DATA.altitude);
+lv_label_set_text(GPSDiag_NMEADebugSummary, (char *)(data ));
   }
   free(data);
 }
@@ -950,7 +1027,7 @@ void nvsRestoreGMeter()
   else
   {
     // Read
-    printf("Reading GMeter from NVS ... ");
+    printf("Reading GMeter from NVS ...\n");
     int8_t gmeter_max = 0; // value will default to 0, if not set yet in NVS
     err = nvs_get_i8(my_handle, "gmeter_max", &gmeter_max);
     switch (err)
@@ -999,6 +1076,8 @@ void nvsRestoreGMeter()
     bmp280override = pcal;
 
     uint8_t defaultPageOrDemo = 0xff; // value will default to 0, if not set yet in NVS
+    // 1.1.23 Default is Advanced Attitude Indicator
+    defaultPageOrDemo = 3;
     err = nvs_get_u8(my_handle, "default", &defaultPageOrDemo);
     switch (err)
     {
@@ -1021,6 +1100,9 @@ void nvsRestoreGMeter()
       DeviceIsDemoMode = 0;
       StartupPage = defaultPageOrDemo;
     }
+
+    // 1.1.23 GPS is mandatory
+    GpsSpeed0ForDisable = 9600;
 
     err = nvs_get_i32(my_handle, "uart", &GpsSpeed0ForDisable);
     switch (err)
@@ -1057,6 +1139,10 @@ void nvsRestoreGMeter()
     intBuffer = 90;
     nvs_get_u8(my_handle, "filterAttitude", &intBuffer);
     AttitudeBalanceAlpha = intBuffer / 250.0;
+    // 1.1.23 Bugfix Filter Output is not stored
+    intBuffer = 5;
+    nvs_get_u8(my_handle, "filterOut", &intBuffer);
+    FilterMoltiplierOutput = intBuffer;
 
     nvs_get_u8(my_handle, "loopms", &DriverLoopMilliseconds);
     if (DriverLoopMilliseconds < 1)
@@ -1091,31 +1177,31 @@ void nvsStoreSpeedArc()
   }
   else
   {
-    printf("Writing Speed to NVS ... ");
+    printf("Writing isKmh to NVS ...\n");
     err = nvs_set_u8(my_handle, "isKmh", isKmh);
     printf((err != ESP_OK) ? "Failed to update isKmh!\n" : "Done\n");
-    printf("Writing Speed to NVS ... ");
+    printf("Writing degreeStart to NVS ...\n");
     err = nvs_set_u16(my_handle, "degreeStart", degreeStart);
     printf((err != ESP_OK) ? "Failed to update degreeStart!\n" : "Done\n");
-    printf("Writing Speed to NVS ... ");
+    printf("Writing degreeEnd to NVS ...\n");
     err = nvs_set_u16(my_handle, "degreeEnd", degreeEnd);
     printf((err != ESP_OK) ? "Failed to update degreeEnd!\n" : "Done\n");
-    printf("Writing Speed to NVS ... ");
+    printf("Writing speedKtStart to NVS ...\n");
     err = nvs_set_u16(my_handle, "speedKtStart", speedKtStart);
     printf((err != ESP_OK) ? "Failed to update speedKtStart!\n" : "Done\n");
-    printf("Writing Speed to NVS ... ");
+    printf("Writing speedKtEnd to NVS ...\n");
     err = nvs_set_u16(my_handle, "speedKtEnd", speedKtEnd);
     printf((err != ESP_OK) ? "Failed to update speedKtEnd!\n" : "Done\n");
-    printf("Writing Speed to NVS ... ");
+    printf("Writing speedWhite to NVS ...\n");
     err = nvs_set_u16(my_handle, "speedWhite", speedWhite);
     printf((err != ESP_OK) ? "Failed to update speedWhite!\n" : "Done\n");
-    printf("Writing Speed to NVS ... ");
+    printf("Writing speedGreen to NVS ...\n");
     err = nvs_set_u16(my_handle, "speedGreen", speedGreen);
     printf((err != ESP_OK) ? "Failed to update speedGreen!\n" : "Done\n");
-    printf("Writing Speed to NVS ... ");
+    printf("Writing speedYellow to NVS ...\n");
     err = nvs_set_u16(my_handle, "speedYellow", speedYellow);
     printf((err != ESP_OK) ? "Failed to update speedYellow!\n" : "Done\n");
-    printf("Writing Speed to NVS ... ");
+    printf("Writing speedRed to NVS ...\n");
     err = nvs_set_u16(my_handle, "speedRed", speedRed);
     printf((err != ESP_OK) ? "Failed to update speedRed!\n" : "Done\n");
     nvs_close(my_handle);
@@ -1134,7 +1220,7 @@ void nvsStoreUARTBaudrate()
   else
   {
     // Read
-    printf("Writing UART from NVS ... ");
+    printf("Writing UART from NVS ...\n");
     err = nvs_set_i32(my_handle, "uart", GpsSpeed0ForDisable);
     printf((err != ESP_OK) ? "Failed to update GpsSpeed0ForDisable!\n" : "Done\n");
     nvs_close(my_handle);
@@ -1155,17 +1241,22 @@ void nvsStoreFilters()
   {
     // Write
     uint8_t intBuffer = FilterMoltiplier;
-    printf("Writing filterAcc from NVS ... %d", intBuffer);
+    printf("Writing filterAcc from NVS ... %d\n", intBuffer);
     nvs_set_u8(my_handle, "filterAcc", intBuffer);
     intBuffer = FilterMoltiplierGyro;
-    printf("Writing filterGyro from NVS ... %d", intBuffer);
+    printf("Writing filterGyro from NVS ... %d\n", intBuffer);
     nvs_set_u8(my_handle, "filterGyro", intBuffer);
     intBuffer = 250 * AttitudeBalanceAlpha;
-    printf("Writing filterAttitude from NVS ... %d", intBuffer);
+    printf("Writing filterAttitude from NVS ... %d\n", intBuffer);
     nvs_set_u8(my_handle, "filterAttitude", intBuffer);
 
-    printf("Writing DriverLoopMilliseconds from NVS ... %d", DriverLoopMilliseconds);
+    printf("Writing DriverLoopMilliseconds from NVS ... %d\n", DriverLoopMilliseconds);
     nvs_set_u8(my_handle, "loopms", DriverLoopMilliseconds);
+
+    // 1.1.23
+    intBuffer = FilterMoltiplierOutput;
+    printf("Writing filterOut from NVS ... %d\n", intBuffer);
+    nvs_set_u8(my_handle, "filterOut", intBuffer);
 
     nvs_close(my_handle);
   }
@@ -1207,7 +1298,7 @@ void nvsStorePCal()
   else
   {
     // Read
-    printf("Writing pcal from NVS ... ");
+    printf("Writing pcal from NVS ...\n");
     err = nvs_set_i32(my_handle, "pcal", bmp280override);
     printf((err != ESP_OK) ? "Failed to update bmp280override!\n" : "Done\n");
     nvs_close(my_handle);
@@ -1226,7 +1317,7 @@ void nvsStoreGMeter()
   else
   {
     // Read
-    printf("Writing GMeter from NVS ... ");
+    printf("Writing GMeter from NVS ...\n");
     err = nvs_set_i8(my_handle, "gmeter_max", 10.0 * GFactorMax);
     printf((err != ESP_OK) ? "Failed to update GMeterMax!\n" : "Done\n");
     err = nvs_set_i8(my_handle, "gmeter_min", 10.0 * GFactorMin);
@@ -1248,7 +1339,7 @@ void nvsStoreDefaultScreenOrDemo()
   else
   {
     // Read
-    printf("Writing Default Screen from NVS ... ");
+    printf("Writing Default Screen from NVS ...\n");
     uint8_t value = 0xff;
 
     if (DeviceIsDemoMode == 1)
@@ -1353,7 +1444,7 @@ void update_TurnSlip_lvgl_tick(lv_timer_t *t)
     }
     else
     {
-      buf[0]=0;
+      buf[0] = 0;
     }
   }
 
@@ -1619,7 +1710,14 @@ void update_Altimeter_lvgl_tick(lv_timer_t *t)
 #ifdef RB_ENABLE_GPS
 void uartApplyRates()
 {
+  // snprintf(SettingStatus4UARTBuf,sizeof(SettingStatus4UARTBuf),"NO DATA RECEIVED");
   lv_label_set_text(SettingStatus4UART, "NO DATA RECEIVED");
+  if (GPSDiag_UARTBaud != NULL)
+  {
+    char buf[20];
+    snprintf(buf, sizeof(buf), "UART Baud: %ld", GpsSpeed0ForDisable);
+    lv_label_set_text(GPSDiag_UARTBaud, buf);
+  }
 
   if (GpsSpeed0ForDisable > 0)
   {
@@ -1634,6 +1732,9 @@ void uartApplyRates()
     };
     // Setup Baud Rate
     uart_param_config(1, &uart_config);
+  }
+  else
+  {
   }
 }
 #endif
@@ -2114,6 +2215,12 @@ void rb_increase_lvgl_tick(lv_timer_t *t)
       }
     }
     break;
+#ifdef RB_ENABLE_GPS
+  case RB02_TAB_GDG:
+    uart_fetch_data();
+    break;
+#endif
+
 #ifdef VIBRATION_TEST
   case RB02_TAB_VBR:
 #ifdef RB_ENABLE_GPS
@@ -2174,7 +2281,7 @@ void rb_increase_lvgl_tick(lv_timer_t *t)
     lv_label_set_text(SettingStatus4, buf);
 
     // 1.1.17
-    snprintf(buf, sizeof(buf), "Engine: %d:%02d:%02d", datetime.month * 24 * 31 + datetime.day * 24 + datetime.hour, datetime.minute, datetime.second);
+    snprintf(buf, sizeof(buf), "Engine MDHms: %02d/%02d %02d:%02d:%02d", datetime.month, datetime.day, datetime.hour, datetime.minute, datetime.second);
     lv_label_set_text(SettingsEngineTimeLabel, buf);
 
 #ifdef RB_ENABLE_GPS
@@ -2529,6 +2636,8 @@ static lv_obj_t *Onboard_create_Base(lv_obj_t *parent, const lv_img_dsc_t *backg
   lv_obj_t *backgroundImage = lv_img_create(parent);
   lv_img_set_src(backgroundImage, backgroundImageName);
   lv_obj_set_size(backgroundImage, backgroundImageName->header.w, backgroundImageName->header.h);
+  // TODO: Migrate to SizeContent
+  // lv_obj_set_size(backgroundImage,LV_SIZE_CONTENT,LV_SIZE_CONTENT);
   lv_obj_align(backgroundImage, LV_ALIGN_CENTER, 0, 0);
   lv_obj_set_scrollbar_mode(backgroundImage, LV_SCROLLBAR_MODE_OFF);
   lv_obj_set_scrollbar_mode(parent, LV_SCROLLBAR_MODE_OFF);
@@ -2828,7 +2937,7 @@ static void Onboard_create_Setup(lv_obj_t *parent)
   if (true)
   {
     lv_obj_t *VersionLabel = lv_label_create(parent);
-    lv_obj_set_size(VersionLabel, 200, 20);
+    lv_obj_set_size(VersionLabel, 300, 20);
     lv_obj_align(VersionLabel, LV_ALIGN_CENTER, 0, lineY);
     lv_obj_set_style_text_font(VersionLabel, &lv_font_montserrat_16, 0);
     lv_obj_set_style_text_align(VersionLabel, LV_TEXT_ALIGN_CENTER, 0);
@@ -3272,7 +3381,9 @@ static void Onboard_create_Setup(lv_obj_t *parent)
     lv_obj_set_style_text_font(SettingStatus4UART, &lv_font_montserrat_16, 0);
     lv_obj_set_style_text_align(SettingStatus4UART, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_add_style(SettingStatus4UART, &style_title, LV_STATE_DEFAULT);
+    // snprintf(SettingStatus4UARTBuf,sizeof(SettingStatus4UARTBuf),"NO DATA RECEIVED");
     lv_label_set_text(SettingStatus4UART, "NO DATA RECEIVED");
+
     lineY += 30;
   }
 #else
@@ -3951,6 +4062,9 @@ static void Onboard_create_Attitude(lv_obj_t *parent)
   lv_obj_set_style_bg_opa(parent, LV_OPA_COVER, LV_PART_ITEMS | LV_STATE_CHECKED);
   Onboard_create_Base(parent, &att_middle_big);
 
+  // 1.1.23 Added Custom Logo on each screen
+  // RB_LV_Helper_CreateImageFromFile(parent,"S:/logo.bmp");
+
   Screen_Attitude_Pitch = Onboard_create_Base(parent, &att_aircraft);
   // 1.1.1 Aircraft Symbol rotation displacement
   lv_img_set_pivot(Screen_Attitude_Pitch, att_aircraft.header.w / 2, 0);
@@ -3970,6 +4084,9 @@ static void Onboard_create_Attitude(lv_obj_t *parent)
   Screen_Attitude_Rounds[2] = NULL;
   Screen_Attitude_Rounds[3] = att_img_tl;
   Screen_Attitude_Rounds[1] = att_img_tr;
+
+  // 1.1.23 Added Custom Logo on each screen
+  // RB_LV_Helper_CreateImageFromFile(parent,"S:/logo.bmp");
 
   Screen_Attitude_RollIndicator = Onboard_create_Base(parent, &att_tri);
   lv_obj_set_pos(Screen_Attitude_RollIndicator, 0, -240 + att_tri.header.h / 2);
@@ -4015,43 +4132,6 @@ static void Onboard_create_Attitude(lv_obj_t *parent)
 
   // 1.1.18 Roadmap to new indicator
   // rotate_AttitudeGearByDegree(0);
-}
-
-static void Onboard_create_Altimeter(lv_obj_t *parent)
-{
-  Onboard_create_Base(parent, &RoundAltimeter);
-
-  // 1.1.1 Branding RB-02 on every screen
-  if (true)
-  {
-    lv_obj_t *label = lv_label_create(parent);
-    lv_obj_set_size(label, 96, 40);
-    lv_obj_align(label, LV_ALIGN_CENTER, 0, -130);
-    lv_obj_set_style_text_font(label, &lv_font_montserrat_16, 0);
-    lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
-    lv_label_set_text(label, "RB 02");
-    lv_obj_add_style(label, &style_title, LV_STATE_DEFAULT);
-  }
-
-  lv_obj_add_event_cb(parent, speedBgClicked, LV_EVENT_CLICKED, NULL);
-
-  Screen_Altitude_QNH = lv_label_create(parent);
-  lv_obj_set_size(Screen_Altitude_QNH, 128, 48);
-  lv_obj_align(Screen_Altitude_QNH, LV_ALIGN_CENTER, 172, 0);
-  lv_obj_set_style_text_font(Screen_Altitude_QNH, &lv_font_montserrat_48, 0);
-  char buf[6];
-  snprintf(buf, sizeof(buf), "%03u", QNH);
-  lv_label_set_text(Screen_Altitude_QNH, buf);
-
-  Screen_Altitude_Miles = lv_img_create(parent);
-  lv_img_set_src(Screen_Altitude_Miles, &fi_needle_small);
-  lv_obj_set_size(Screen_Altitude_Miles, fi_needle_small.header.w, fi_needle_small.header.h);
-  lv_obj_align(Screen_Altitude_Miles, LV_ALIGN_CENTER, 0, 0);
-
-  Screen_Altitude_Cents = lv_img_create(parent);
-  lv_img_set_src(Screen_Altitude_Cents, &fi_needle);
-  lv_obj_set_size(Screen_Altitude_Cents, fi_needle.header.w, fi_needle.header.h);
-  lv_obj_align(Screen_Altitude_Cents, LV_ALIGN_CENTER, 0, 0);
 }
 
 static void Onboard_create_TurnSlip(lv_obj_t *parent)
