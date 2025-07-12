@@ -1,10 +1,8 @@
-#pragma once
-
 /**
  * This file is part of RB.
  *
  * Copyright (C) 2024 XIAPROJECTS SRL
- * 
+ *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as published
  * by the Free Software Foundation, version 3.
@@ -22,37 +20,25 @@
  * 02 -> Display with SixPack
  * 03 -> Display with Autopilot, ADSB, Radio, Flight Computer
  * 04 -> Display with EMS: Engine monitoring system
- * 
+ *
  * Community edition will be free for all builders and personal use as defined by the licensing model
  * Dual licensing for commercial agreement is available
  *
 */
-#include "lvgl.h"
+#pragma once
+#include "RB02_GUIHelpers.h"
 
-#define EXAMPLE1_LVGL_TICK_PERIOD_MS  1000
-
-
-// 1.1.18 Unified single source for both displays
-#define RB_02_DISPLAY_21 21
-#define RB_02_DISPLAY_28 28
-
-//  1.1.3 Supports for 2.1 and 2.8 displays
-#define RB_02_DISPLAY_SIZE RB_02_DISPLAY_21
-#define SCREEN_HEIGHT 480
-#define SCREEN_WIDTH 480
-
-// 1.1.19 Add Map capability
-#define RB_ENABLE_MAP 1
-//#define RB_02_ENABLE_INTERNALMAP 1
-#define RB_02_ENABLE_EXTERNALMAP 1
-#define RB_ENABLE_CHECKLIST 1
-
-// 1.1.20 Advanced Attitude Indicator
-#define RB_ENABLE_AAT 1
-
-void Backlight_adjustment_event_cb(lv_event_t * e);
-
-void RB02_Example1(void);
-void LVGL_Backlight_adjustment(uint8_t Backlight);
-void draw_arch(lv_obj_t *parent, const lv_img_dsc_t *t, uint16_t degreeStartSlide, uint16_t degreeEndSlide);
-extern const lv_res_t Screen_TurnSlip_Obj_Ball_Size;
+lv_obj_t *RB02_GUIHelpers_CreateBase(lv_obj_t *parent, const lv_img_dsc_t *backgroundImageName)
+{
+    lv_obj_t *backgroundImage = lv_img_create(parent);
+    lv_img_set_src(backgroundImage, backgroundImageName);
+    lv_obj_set_size(backgroundImage, backgroundImageName->header.w, backgroundImageName->header.h);
+    // TODO: Migrate to SizeContent
+    // lv_obj_set_size(backgroundImage,LV_SIZE_CONTENT,LV_SIZE_CONTENT);
+    lv_obj_align(backgroundImage, LV_ALIGN_CENTER, 0, 0);
+    lv_obj_set_scrollbar_mode(backgroundImage, LV_SCROLLBAR_MODE_OFF);
+    lv_obj_set_scrollbar_mode(parent, LV_SCROLLBAR_MODE_OFF);
+    // 1.1.9 Remove scrolling for Turbolence touch screen
+    lv_obj_clear_flag(parent, LV_OBJ_FLAG_SCROLLABLE);
+    return backgroundImage;
+}

@@ -1,22 +1,63 @@
 # RB-02
 The RB is the Open-source Aviation instruments suite, the models are divided by CPU/Features. RB-02 will run in ESP32 (Arduino).
 
-## Features
-- Attitude indicator
-- Altimeter
-- Variometer
-- Turn & Slip
-- GMeter
-- Timers
-
-## Shopping list
-### Components
-- https://www.waveshare.com/esp32-s3-touch-lcd-2.8c.htm
-- BMP280
-- 12V to 5V DC-DC converter
-
 ## How to
 You can built it yourself by following this procedure:
 1) Download the ESP32-S3-Touch-LCD-2.8C-Demo.zip https://files.waveshare.com/wiki/ESP32-S3-Touch-LCD-2.8C/ESP32-S3-Touch-LCD-2.8C-Demo.zip
 2) Overwrite the GIT files
 3) Compile following the official Wiki: https://www.waveshare.com/wiki/ESP32-S3-Touch-LCD-2.8C
+
+
+### Features
+1. Customisable splash screen (image that can be displayed when ever you want) 
+3. GPS Speed, with KMH or KT configuration and colored arcs
+4. Attitude indicator GPS Assisted
+5. Advanced Attitude Indicator
+6. Altimeter with QNH settings
+7. Altimeter digital with GPS Altimeter comparation
+8. Slip & Turn with degree indicator
+9. Gyro based on Gyroscope assisted with GPS Track
+10. GPS Map based on BMP Tiles, you can load your map in the SDCard
+11. Variometer
+12. G-Meter with Max-Negative stored
+13. Timers: up to 3 timers with GPS UTC Clock
+14. Checklist loaded from SDCard
+15. Engine Hour Lifetime Chrono
+
+
+### Requirements
+- Supported Display Devices are 2.8 and 2.1 Touch or not touch:
+- https://www.waveshare.com/wiki/ESP32-S3-Touch-LCD-2.8C
+- https://www.waveshare.com/wiki/ESP32-S3-Touch-LCD-2.1
+- Barometer Device: BMP280 or similar
+- Flashing tool: https://www.waveshare.com/wiki/Flash_Firmware_Flashing_and_Erasing
+- Case: you can find the STL on wiki
+- GPS: any TTL NMEA GPS with $GPRMC such as uBlox NEO M6N and up
+- SDCard
+
+### Installation
+Please read the installation Wiki: to make it working the aircraft profile shall be correctly loaded in the setup.
+We added a "vibration" correction setup: please verify with your mechanic which is the best options.
+
+### Setup Screens
+1. Setup
+2. Vibration Setup
+3. GPS Status
+
+### Video
+- https://www.youtube.com/watch?v=9aCub_4hdxs
+- https://www.youtube.com/watch?v=8FwM3qiaDVQ
+- https://www.youtube.com/watch?v=Gy3Yu2zPZRM
+
+### Flasher setup
+- chip esp32s3
+- flash_mode dio
+- flash_size 16MB
+- 0x0 bootloader.bin
+- 0x10000 Application Binary
+- 0x8000 partition-table.bin
+
+If you have problems check Youtube guides and try a "full clear" during flash
+
+## License
+This project is licensed under the GNU AGPLv3. See the LICENSE file for details.

@@ -1,23 +1,118 @@
-/**
- * Copyright (c) 2024 XIAPROJECTS SRL
- * Distributable under the terms of The "BSD New" License
- * that can be found in the LICENSE file, herein included
- * as part of this header.
- * This source is part of the project RB
- */
+#pragma once
 
+/**
+ * This file is part of RB.
+ *
+ * Copyright (C) 2024 XIAPROJECTS SRL
+ * 
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as published
+ * by the Free Software Foundation, version 3.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU Affero General Public License for more details.
+ *
+ * You should have received a copy of the GNU Affero General Public License
+ * along with this program. If not, see <https://www.gnu.org/licenses/>.
+
+ * This source is part of the project RB:
+ * 01 -> Display with Synthetic vision, Autopilot and ADSB
+ * 02 -> Display with SixPack
+ * 03 -> Display with Autopilot, ADSB, Radio, Flight Computer
+ * 04 -> Display with EMS: Engine monitoring system
+ * 
+ * Community edition will be free for all builders and personal use as defined by the licensing model
+ * Dual licensing for commercial agreement is available
+ *
+*/
 #include "RB02_GPSMap.h"
 #ifdef RB_ENABLE_MAP
 #include "lvgl.h"
 #include <stdio.h>
+#include <math.h>
+
 #ifdef RB_02_ENABLE_INTERNALMAP
 #include "images/GPSMapInternal.c"
 #endif
 
 // #define RB_MAP_MULTI_TILE 1
+extern lv_style_t style_title;
 
 #define RB_02_ZOOM_SUPPORTED 3
 uint8_t zoomSlicerMapper[RB_02_ZOOM_SUPPORTED] = {100, 50, 20};
+#ifdef USE_THIS_TO_EXTRACT_MBTILES
+// Support for MBTILES
+#define PI 3.14159265358979323846
+
+// Structure to hold bounding box
+typedef struct
+{
+    double minLon;
+    double minLat;
+    double maxLon;
+    double maxLat;
+} BBox;
+
+// Converts tile (x, y in TMS) and zoom to bounding box in WGS84
+
+BBox tile_to_bbox_tms(int x, int y_tms, int z)
+{
+    int n = 1 << z; // 2^z
+
+    // Convert TMS y to XYZ y
+    int y = n - 1 - y_tms;
+
+    // Longitude (easy)
+    double minLon = x / (double)n * 360.0 - 180.0;
+    double maxLon = (x + 1) / (double)n * 360.0 - 180.0;
+
+    // Latitude (via Web Mercator inverse)
+    double lat_rad1 = atan(sinh(PI - 2.0 * PI * y / (double)n));
+    double lat_rad2 = atan(sinh(PI - 2.0 * PI * (y + 1) / (double)n));
+
+    double maxLat = lat_rad1 * 180.0 / PI;
+    double minLat = lat_rad2 * 180.0 / PI;
+
+    BBox bbox = {minLon, minLat, maxLon, maxLat};
+    return bbox;
+}
+#endif
+
+// 1.1.22 MBTILES support
+typedef struct
+{
+    int x;
+    int y_tms;
+} TileXY;
+
+// Converts latitude, longitude, zoom → tile X/Y (TMS)
+TileXY latlon_to_tile_tms(double lat_deg, double lon_deg, int zoom)
+{
+    int n = 1 << zoom; // 2^zoom
+
+    // Clamp latitude to Mercator limits
+    if (lat_deg > 85.05112878)
+        lat_deg = 85.05112878;
+    if (lat_deg < -85.05112878)
+        lat_deg = -85.05112878;
+
+    // Convert longitude to [0, 1] range
+    double x = (lon_deg + 180.0) / 360.0 * n;
+
+    // Convert latitude to Mercator Y
+    double lat_rad = lat_deg * M_PI / 180.0;
+    double y = (1.0 - log(tan(lat_rad) + 1.0 / cos(lat_rad)) / M_PI) / 2.0 * n;
+
+    // Convert Y to TMS format (Y=0 at bottom)
+    int x_tile = (int)floor(x);
+    int y_xyz = (int)floor(y);
+    int y_tms = n - 1 - y_xyz;
+
+    TileXY tile = {x_tile, y_tms};
+    return tile;
+}
 
 void RB02_GPSMap_SquareGenerator(RB02_GpsMapStatus *gpsMapStatus, float centerLatitude, float centerLongitude)
 {
@@ -106,7 +201,7 @@ void RB02_GPSMap_Touch_S(RB02_GpsMapStatus *gpsMapStatus)
 #endif
 }
 
-void RB02_GPSMap_ReloadTiles(RB02_GpsMapStatus *gpsMapStatus, lv_obj_t *parent)
+void RB02_GPSMap_ReloadTiles(RB02_GpsMapStatus *gpsMapStatus, gps_t *gpsStatus, lv_obj_t *parent)
 {
 
     //
@@ -148,8 +243,18 @@ void RB02_GPSMap_ReloadTiles(RB02_GpsMapStatus *gpsMapStatus, lv_obj_t *parent)
             int32_t currentLatitudeTile = (gpsMapStatus->mapLatitudeBegin);
             int32_t currentLongitudeTile = (gpsMapStatus->mapLongitudeBegin);
 #endif
-            uint8_t folderIndex = 100 / zoomSlicerMapper[gpsMapStatus->zoomLevel];
-            snprintf(filename, sizeof(filename), "S:/z%d/%04ld%04ld.bmp", folderIndex, currentLatitudeTile, currentLongitudeTile);
+
+            // 1.1.22
+            if (gpsMapStatus->enableMercatoreLatLon == true)
+            {
+                uint8_t folderIndex = 100 / zoomSlicerMapper[gpsMapStatus->zoomLevel];
+                snprintf(filename, sizeof(filename), "S:/z%d/%04ld%04ld.bmp", folderIndex, currentLatitudeTile, currentLongitudeTile);
+            }
+            else
+            {
+                TileXY tileCoordinates = latlon_to_tile_tms(gpsStatus->latitude,gpsStatus->longitude, gpsMapStatus->zoomLevel);
+                snprintf(filename, sizeof(filename), "S:/%d/%d_%d.bmp", gpsMapStatus->zoomLevel, tileCoordinates.x, tileCoordinates.y_tms);
+            }
             lv_label_set_text(gpsMapStatus->labelTilePath, filename);
             lv_img_set_src(backgroundImage, filename);
             // lv_obj_set_size(backgroundImage, gpsMapStatus->tileSizeWidth, gpsMapStatus->tileSizeHeight);
@@ -183,6 +288,10 @@ lv_obj_t *RB02_GPSMap_CreateScreen(RB02_GpsMapStatus *gpsMapStatus, lv_obj_t *pa
     gpsMapStatus->mapLongitudeBegin = 0;
     gpsMapStatus->mapLatitudeEnd = 0;
     gpsMapStatus->mapLongitudeEnd = 0;
+    // 1.1.22
+    // true=Mercatore means: z%d/%d%d.bmp zoom,lat,lon
+    // false=XYZ projection z%d/%d_%d.bmp zoom,x,y
+    gpsMapStatus->enableMercatoreLatLon = false;
 
 #ifdef RB_02_ENABLE_INTERNALMAP
 
@@ -218,6 +327,17 @@ lv_obj_t *RB02_GPSMap_CreateScreen(RB02_GpsMapStatus *gpsMapStatus, lv_obj_t *pa
 #else
 
 #endif
+    if (true)
+    {
+        lv_obj_t *label = lv_label_create(parent);
+        lv_obj_set_size(label, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+        lv_obj_align(label, LV_ALIGN_CENTER, 0, -200);
+        lv_obj_add_style(label, &style_title, LV_STATE_DEFAULT);
+        lv_obj_set_style_text_font(label, &lv_font_montserrat_48, 0);
+        lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
+        lv_label_set_text(label, "GPS Map");
+    }
+
 
     if (true)
     {
@@ -304,7 +424,7 @@ void RB02_GPSMap_Tick(RB02_GpsMapStatus *gpsMapStatus, gps_t *gpsStatus, lv_obj_
 
     if (gpsMapStatus->mapDirty != 0)
     {
-        RB02_GPSMap_ReloadTiles(gpsMapStatus, parent);
+        RB02_GPSMap_ReloadTiles(gpsMapStatus, gpsStatus, parent);
     }
 
     char buf[20];
