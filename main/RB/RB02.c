@@ -49,12 +49,14 @@
  * - GPS Time
  *
  * Supported hardware:
- * - ESP32-S3 2.8" Inch Round display 480x480
+ * - ESP32-S3 2.1" Inch Round display 480x480
+ * - ESP32-S3 2.8" Inch Round display 480x480 NON TOUCH
+ * - ESP32-S3 2.8" Inch Round display 480x480 TOUCH
  * - https://www.waveshare.com/esp32-s3-touch-lcd-2.8c.htm
  */
 #include "RB02.h"
 // 1.1.2 Version is here
-#define RB_VERSION "1.1.23 DIAG"
+#define RB_VERSION "1.1.23"
 // 1.1.1 Remove tabs with GPS if not installed
 #define RB_ENABLE_GPS 1
 // 1.1.19 Starting getting rid of demo screens
@@ -79,7 +81,9 @@
 #endif
 
 #ifdef RB_ENABLE_GPS
+#ifdef RB_ENABLE_GPS_DIAG
 #include "RB02_GPSDiag.h"
+#endif
 #endif
 
 #ifdef RB_ENABLE_CHECKLIST
@@ -271,7 +275,7 @@ typedef enum
 #ifdef VIBRATION_TEST
   RB02_TAB_VBR,
 #endif
-#ifdef RB_ENABLE_GPS
+#ifdef RB_ENABLE_GPS_DIAG
   RB02_TAB_GDG,
 #endif
   RB02_TAB_DEV
@@ -291,11 +295,6 @@ lv_obj_t *SettingStatus3 = NULL;
 lv_obj_t *SettingStatus4 = NULL;
 lv_obj_t *SettingStatus5 = NULL;
 lv_obj_t *SettingStatus4UART = NULL;
-extern lv_obj_t *GPSDiag_NMEADebugLine;
-extern lv_obj_t *GPSDiag_UARTBaud;
-extern lv_obj_t *GPSDiag_NMEADebugRMC;
-extern lv_obj_t *GPSDiag_NMEADebugGGA;
-extern lv_obj_t *GPSDiag_NMEADebugSummary;
 
 // char SettingStatus4UARTBuf[20];
 lv_style_t style_title;
@@ -433,8 +432,13 @@ touchLocation getTouchLocation(lv_coord_t x, lv_coord_t y)
 void ApplyCoding(void)
 {
   // 1.1.23 Removing Default Demo Version
+#ifdef RB_02_DISPLAY_TOUCH
+  DeviceIsDemoMode = 1;
+  StartupPage = 0;
+#else
   DeviceIsDemoMode = 0;
   StartupPage = RB02_TAB_AAT;
+#endif
 }
 
 #ifdef RB_ENABLE_MAP
@@ -523,7 +527,7 @@ void RB02_Example1(void)
 #else
 #endif
 
-#ifdef RB_ENABLE_GPS
+#ifdef RB_ENABLE_GPS_DIAG
   lv_obj_t *tGPSDiag = lv_tabview_add_tab(tv, "GPS Diag");
 #endif
 
@@ -579,7 +583,7 @@ void RB02_Example1(void)
 #else
 #endif
 
-#ifdef RB_ENABLE_GPS
+#ifdef RB_ENABLE_GPS_DIAG
   RB02_GPSDiag_CreateScreen(tGPSDiag);
 #endif
 
@@ -953,9 +957,11 @@ void uart_fetch_data()
     }
     printf("\n");
     */
+#ifdef RB_ENABLE_GPS_DIAG
     // Debug UART
     // snprintf(SettingStatus4UARTBuf,sizeof(SettingStatus4UARTBuf),"%s",data);
     lv_label_set_text(GPSDiag_NMEADebugLine, (char *)data);
+#endif
     for (int x = 0; x < rxBytes - 23; x++)
     {
       //$GPRMC,,,,,,,,,,,,A*79
@@ -969,10 +975,12 @@ void uart_fetch_data()
             // TODO: jump directly to the slice
             // break;
           }
+#ifdef RB_ENABLE_GPS_DIAG
           if (GPSDiag_NMEADebugRMC != NULL)
           {
             lv_label_set_text(GPSDiag_NMEADebugRMC, (char *)(data + x));
           }
+#endif
           // break; // Fast as possibile we go back and do not parse anymore
         }
         else
@@ -985,10 +993,12 @@ void uart_fetch_data()
               // break;
             }
             // break; // Fast as possibile we go back and do not parse anymore
+#ifdef RB_ENABLE_GPS_DIAG
             if (GPSDiag_NMEADebugGGA != NULL)
             {
               lv_label_set_text(GPSDiag_NMEADebugGGA, (char *)(data + x));
             }
+#endif
           }
         }
       }
@@ -1004,14 +1014,16 @@ void uart_fetch_data()
       Operative_GPS = false;
     }
   }
-
-  if(GPSDiag_NMEADebugSummary != NULL){
+#ifdef RB_ENABLE_GPS_DIAG
+  if (GPSDiag_NMEADebugSummary != NULL)
+  {
     int64_t now = esp_timer_get_time();
     int64_t isGPSTimeout = (now - GPSLastSpeedKmhReceivedTick);
     int16_t isGPSTimeoutDeciseconds = isGPSTimeout / 100000;
-snprintf((char *)data,RX_BUF_SIZE,"Parsed: %d %d %.1f %.1f %1.f",isGPSTimeoutDeciseconds,NMEA_DATA.valid,NMEA_DATA.speed,NMEA_DATA.cog,NMEA_DATA.altitude);
-lv_label_set_text(GPSDiag_NMEADebugSummary, (char *)(data ));
+    snprintf((char *)data, RX_BUF_SIZE, "Parsed: %d %d %.1f %.1f %1.f", isGPSTimeoutDeciseconds, NMEA_DATA.valid, NMEA_DATA.speed, NMEA_DATA.cog, NMEA_DATA.altitude);
+    lv_label_set_text(GPSDiag_NMEADebugSummary, (char *)(data));
   }
+#endif
   free(data);
 }
 #endif
@@ -1076,8 +1088,11 @@ void nvsRestoreGMeter()
     bmp280override = pcal;
 
     uint8_t defaultPageOrDemo = 0xff; // value will default to 0, if not set yet in NVS
-    // 1.1.23 Default is Advanced Attitude Indicator
+                                      // 1.1.23 Default is Advanced Attitude Indicator
+#ifdef RB_02_DISPLAY_TOUCH
+#else
     defaultPageOrDemo = 3;
+#endif
     err = nvs_get_u8(my_handle, "default", &defaultPageOrDemo);
     switch (err)
     {
@@ -1712,13 +1727,14 @@ void uartApplyRates()
 {
   // snprintf(SettingStatus4UARTBuf,sizeof(SettingStatus4UARTBuf),"NO DATA RECEIVED");
   lv_label_set_text(SettingStatus4UART, "NO DATA RECEIVED");
+#ifdef RB_ENABLE_GPS_DIAG
   if (GPSDiag_UARTBaud != NULL)
   {
     char buf[20];
     snprintf(buf, sizeof(buf), "UART Baud: %ld", GpsSpeed0ForDisable);
     lv_label_set_text(GPSDiag_UARTBaud, buf);
   }
-
+#endif
   if (GpsSpeed0ForDisable > 0)
   {
     // 1.0.9 Enable UART for NMEA GPS Input
@@ -1993,24 +2009,29 @@ void rb_increase_lvgl_tick(lv_timer_t *t)
     uart_fetch_data();
 #endif
     RB02_AdvancedAttitude_Tick(&advancedAttitude_Status, &NMEA_DATA, Altimeter, QNH, Variometer);
-    if (Operative_GPS && OperativeWarningVisible == true)
+    {
+    uint8_t isAttitudeDoNotNeedGPS = 1;
+#ifdef RB_ENABLE_GPS
+    isAttitudeDoNotNeedGPS = Operative_GPS;
+#endif
+
+    if (Operative_BMP280 && Operative_Attitude && isAttitudeDoNotNeedGPS && OperativeWarningVisible == true)
     {
       lv_obj_add_flag(OperativeWarning, LV_OBJ_FLAG_HIDDEN);
       OperativeWarningVisible = false;
     }
     else
     {
-      if (Operative_GPS == 0 && OperativeWarningVisible == false)
+      if ((Operative_Attitude == 0 || Operative_BMP280 == 0 || isAttitudeDoNotNeedGPS == 0) && OperativeWarningVisible == false)
       {
-        // For demo purposes!
-        // lv_obj_clear_flag(OperativeWarning, LV_OBJ_FLAG_HIDDEN);
-        // OperativeWarningVisible = true;
+        lv_obj_clear_flag(OperativeWarning, LV_OBJ_FLAG_HIDDEN);
+        OperativeWarningVisible = true;
       }
       else
       {
       }
     }
-    break;
+  }
     break;
 #endif
 
@@ -2215,7 +2236,7 @@ void rb_increase_lvgl_tick(lv_timer_t *t)
       }
     }
     break;
-#ifdef RB_ENABLE_GPS
+#ifdef RB_ENABLE_GPS_DIAG
   case RB02_TAB_GDG:
     uart_fetch_data();
     break;
