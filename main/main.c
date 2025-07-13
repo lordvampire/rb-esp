@@ -10,7 +10,10 @@
 #include "RB02.h"
 #if RB_02_DISPLAY_SIZE == RB_02_DISPLAY_28
 // ESP32-S3-2.8C
+#ifdef RB_02_DISPLAY_TOUCH
+// TODO: we shall remove the compilation of the C file
 #include "GT911.h"
+#endif
 #endif
 #if RB_02_DISPLAY_SIZE == RB_02_DISPLAY_21
 // ESP32-S3-2.1C
@@ -94,8 +97,11 @@ void app_main(void)
     uart_set_pin(1, UART_PIN_NO_CHANGE, GPIO_NUM_44, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
 
     LCD_Init();
+// 1.1.23 Add non touch unified official support
+#ifdef RB_02_DISPLAY_TOUCH
     Touch_Init();
-    // SD_Init();
+#endif
+    SD_Init();
     LVGL_Init();
     /********************* Demo *********************/
     // Lvgl_Example1();

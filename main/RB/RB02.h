@@ -35,6 +35,7 @@
 // 1.1.18 Unified single source for both displays
 #define RB_02_DISPLAY_21 21
 #define RB_02_DISPLAY_28 28
+#define RB_02_DISPLAY_TOUCH 1
 
 //  1.1.3 Supports for 2.1 and 2.8 displays
 #define RB_02_DISPLAY_SIZE RB_02_DISPLAY_21
@@ -49,6 +50,9 @@
 
 // 1.1.20 Advanced Attitude Indicator
 #define RB_ENABLE_AAT 1
+
+// 1.1.23 GPS Diagnostic Screen
+//#define RB_ENABLE_GPS_DIAG 1
 
 void Backlight_adjustment_event_cb(lv_event_t * e);
 
