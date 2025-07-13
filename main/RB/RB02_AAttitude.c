@@ -79,7 +79,7 @@ void RB02_AdvancedAttitude_RollPitchAlign(RB02_AdvancedAttitude_Status *aaStatus
     lv_img_set_angle(aaStatus->lv_roll, -roll * 10.0);
 }
 
-void RB02_AdvancedAttitude_MoveItems(lv_obj_t *item, int16_t degree)
+void RB02_AdvancedAttitude_MoveItems(lv_obj_t *item, int16_t degree, int16_t displacementX, int16_t displacementY)
 {
     int16_t sin = lv_trigo_sin(degree - 90) / 327;
     int16_t cos = lv_trigo_cos(degree - 90) / 327;
@@ -87,7 +87,7 @@ void RB02_AdvancedAttitude_MoveItems(lv_obj_t *item, int16_t degree)
     int16_t x = (cos * 150) / 100;
     int16_t y = (sin * 230) / 100;
 
-    lv_obj_align(item, LV_ALIGN_CENTER, x, y);
+    lv_obj_align(item, LV_ALIGN_CENTER, x+displacementX, y+displacementY);
 }
 
 int16_t RB02_AdvancedAttitude_ProgressBoth(RB02_AdvancedAttitude_Status *aaStatus, int32_t value, int32_t start, int32_t end)
@@ -143,8 +143,10 @@ void RB02_AdvancedAttitude_Tick(RB02_AdvancedAttitude_Status *aaStatus, gps_t *g
         lv_label_set_text(aaStatus->lv_altimeter, buf);
 
         int16_t degreeAltimeterInFeet = RB_AAT_START_RIGHT_ARC - RB02_AdvancedAttitude_ProgressBoth(aaStatus, AltimeterInFeet, 0, 10000);
-        RB02_AdvancedAttitude_MoveItems(aaStatus->lv_altimeter, degreeAltimeterInFeet);
-        RB02_AdvancedAttitude_MoveItems(aaStatus->lv_altimeter_background, degreeAltimeterInFeet);
+        RB02_AdvancedAttitude_MoveItems(aaStatus->lv_altimeter, degreeAltimeterInFeet,0,0);
+        RB02_AdvancedAttitude_MoveItems(aaStatus->lv_altimeter_background, degreeAltimeterInFeet,0,0);
+        RB02_AdvancedAttitude_MoveItems(aaStatus->lv_altimeter_unit, degreeAltimeterInFeet,0,-34);
+        RB02_AdvancedAttitude_MoveItems(aaStatus->lv_variometer, degreeAltimeterInFeet,0,+34);
 
         for (int position = 0; position < RB_AAT_ARC_NUMBERS; position++)
         {
@@ -173,8 +175,11 @@ void RB02_AdvancedAttitude_Tick(RB02_AdvancedAttitude_Status *aaStatus, gps_t *g
         lv_label_set_text(aaStatus->lv_speed, buf);
 
         int16_t degreeSpeed = RB_AAT_START_LEFT_ARC + RB02_AdvancedAttitude_ProgressBoth(aaStatus, gpsStatus->speed, speedKtStart, speedKtEnd);
-        RB02_AdvancedAttitude_MoveItems(aaStatus->lv_speed, degreeSpeed);
-        RB02_AdvancedAttitude_MoveItems(aaStatus->lv_speed_background, degreeSpeed);
+        RB02_AdvancedAttitude_MoveItems(aaStatus->lv_speed, degreeSpeed,0,0);
+        RB02_AdvancedAttitude_MoveItems(aaStatus->lv_speed_background, degreeSpeed,0,0);
+        RB02_AdvancedAttitude_MoveItems(aaStatus->lv_speed_unit, degreeSpeed,0,-34);
+        RB02_AdvancedAttitude_MoveItems(aaStatus->lv_gmeter, degreeSpeed,0,+34);
+
     }
 
     if (aaStatus->Variometer != Variometer)
@@ -224,7 +229,7 @@ void RB02_AdvancedAttitude_Tick(RB02_AdvancedAttitude_Status *aaStatus, gps_t *g
     if (aaStatus->GFactor != GFactor * 10)
     {
         aaStatus->GFactor = GFactor * 10;
-        snprintf(buf, sizeof(buf), "%.1f", GFactor);
+        snprintf(buf, sizeof(buf), "%.1fG", GFactor);
         lv_label_set_text(aaStatus->lv_gmeter, buf);
     }
 
@@ -233,13 +238,13 @@ void RB02_AdvancedAttitude_Tick(RB02_AdvancedAttitude_Status *aaStatus, gps_t *g
         aaStatus->AttitudeYawDegreePerSecond = AttitudeYawDegreePerSecond;
         if (AttitudeYawDegreePerSecond > 1)
         {
-            snprintf(buf, sizeof(buf), "%.0fR", AttitudeYawDegreePerSecond);
+            snprintf(buf, sizeof(buf), "%.0f°", AttitudeYawDegreePerSecond);
         }
         else
         {
             if (AttitudeYawDegreePerSecond < -1)
             {
-                snprintf(buf, sizeof(buf), "%.0fL", AttitudeYawDegreePerSecond);
+                snprintf(buf, sizeof(buf), "%.0f°", -AttitudeYawDegreePerSecond);
             }
             else
             {
@@ -442,6 +447,7 @@ lv_obj_t *RB02_AdvancedAttitude_CreateScreen(RB02_AdvancedAttitude_Status *aaSta
         lv_obj_set_style_text_color(label, lv_color_black(), 0);
 
         lv_label_set_text(label, "feet");
+        aaStatus->lv_altimeter_unit = label;
     }
     if (aaStatus->lv_parent != NULL)
     {
@@ -459,6 +465,8 @@ lv_obj_t *RB02_AdvancedAttitude_CreateScreen(RB02_AdvancedAttitude_Status *aaSta
         {
             lv_label_set_text(label, "KT");
         }
+
+        aaStatus->lv_speed_unit = label;
     }
 
     if (aaStatus->lv_parent != NULL)

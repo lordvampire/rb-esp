@@ -28,6 +28,14 @@
 #pragma once
 #include "lvgl.h"
 #include "RB02.h"
+#ifdef RB_ENABLE_GPS_DIAG
+
+extern lv_obj_t *GPSDiag_NMEADebugLine;
+extern lv_obj_t *GPSDiag_UARTBaud;
+extern lv_obj_t *GPSDiag_NMEADebugRMC;
+extern lv_obj_t *GPSDiag_NMEADebugGGA;
+extern lv_obj_t *GPSDiag_NMEADebugSummary;
+
 lv_obj_t *RB02_GPSDiag_CreateScreen(lv_obj_t *parent);
 
-
+#endif

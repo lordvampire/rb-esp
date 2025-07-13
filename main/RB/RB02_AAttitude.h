@@ -41,6 +41,7 @@ typedef struct
     lv_obj_t *lv_pitch;
     lv_obj_t *lv_roll;
     lv_obj_t *lv_speed;
+    lv_obj_t *lv_speed_unit;
     lv_obj_t *lv_speed_background;
     lv_obj_t *lv_gyro;
     lv_obj_t *lv_gyro_pink;
@@ -48,6 +49,7 @@ typedef struct
     lv_obj_t *lv_gmeter;
     lv_obj_t *lv_variometer;
     lv_obj_t *lv_altimeter;
+    lv_obj_t *lv_altimeter_unit;
     lv_obj_t *lv_altimeter_background;
     lv_obj_t *lv_qnh;
     lv_obj_t *lv_ball;
