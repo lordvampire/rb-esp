@@ -27,28 +27,37 @@
  * Dual licensing for commercial agreement is available
  *
 */
-#pragma once
-#include "lvgl.h"
-#include "RB02_NMEA.h"
-#include "RB02.h"
+#include "RB02_Defines.h"
+
 
 #ifdef RB_ENABLE_MAP
-#ifdef RB_02_ENABLE_EXTERNALMAP
-#define RB_02_ENABLE_EXTERNALMAP_WIDTH 30 // Maximun zoom out
-#endif
+
+#include "lvgl.h"
+#include "RB02_NMEA.h"
+
+
+
+// 1.1.22 MBTILES support
+typedef struct
+{
+    int x;
+    int y_tms;
+} TileXY;
 
 typedef struct
 {
 #ifdef RB_02_ENABLE_EXTERNALMAP
-    lv_obj_t *tiles[(SCREEN_WIDTH/RB_02_ENABLE_EXTERNALMAP_WIDTH)*(SCREEN_WIDTH/RB_02_ENABLE_EXTERNALMAP_WIDTH)];
-    uint16_t tileSizeHeight;
-    uint16_t tileSizeWidth;
+    lv_obj_t *tiles[9];
+
     uint8_t zoomLevel;
     uint8_t mapDirty;
-    int32_t latitude100;
-    int32_t longitude100;
+
     bool enableMercatoreLatLon;
 #endif
+    uint16_t tileSizeHeight;
+    uint16_t tileSizeWidth;
+    int32_t latitude100;
+    int32_t longitude100;
     lv_obj_t *poiMy;
     lv_obj_t *labelLatitude;
     lv_obj_t *labelTilePath;
@@ -57,6 +66,7 @@ typedef struct
     int32_t mapLongitudeBegin;
     int32_t mapLatitudeEnd;
     int32_t mapLongitudeEnd;
+    TileXY lastTile;
 } RB02_GpsMapStatus;
 
 lv_obj_t *RB02_GPSMap_CreateScreen(RB02_GpsMapStatus *gpsMapStatus, lv_obj_t *parent);

@@ -55,19 +55,12 @@
  * - https://www.waveshare.com/esp32-s3-touch-lcd-2.8c.htm
  */
 #include "RB02.h"
-// 1.1.2 Version is here
-#define RB_VERSION "1.1.23"
-// 1.1.1 Remove tabs with GPS if not installed
-#define RB_ENABLE_GPS 1
-// 1.1.19 Starting getting rid of demo screens
-// #define ENABLE_DEMO_SCREENS 1
+
 
 // Images pre-loaded
 #ifdef ENABLE_DEMO_SCREENS
 #include "RoundSynthViewAttitude.c"
 #endif
-
-#define VIBRATION_TEST 1
 
 // 1.1.19 Refactoring, images
 #include "RB02Images.c"
@@ -120,9 +113,16 @@
 #include "PCF85063.h"
 #include "RB02_SDCardInject.c"
 
+
+
 #define Backlight_MAX 100
 void Set_Backlight(uint8_t Light);
 int64_t esp_timer_get_time(void);
+void Backlight_adjustment_event_cb(lv_event_t * e);
+
+void LVGL_Backlight_adjustment(uint8_t Backlight);
+void draw_arch(lv_obj_t *parent, const lv_img_dsc_t *t, uint16_t degreeStartSlide, uint16_t degreeEndSlide);
+
 
 extern uint8_t DriverLoopMilliseconds; // 1.1.9 Anti precession
 extern float BAT_analogVolts;          // 1.1.4 Power management
@@ -406,7 +406,7 @@ lv_obj_t *t_speedYellow = NULL;
 lv_obj_t *t_speedRed = NULL;
 uint64_t _chipmacid = 0LL;
 uint8_t workflow = 0;
-int32_t bmp280override = 0;
+
 int32_t bmp280Calibration[12];
 BMP280_S32_t t_fine = 0;
 lv_obj_t *bmp280overrideLabel = NULL;
@@ -442,11 +442,13 @@ void ApplyCoding(void)
 }
 
 #ifdef RB_ENABLE_MAP
-RB02_GpsMapStatus gpsMapStatus;
 lv_obj_t *t0 = NULL;
 #endif
 void RB02_Example1(void)
 {
+
+  // initialise the Centralised configuration
+  singletonConfig();
 
   font_large = LV_FONT_DEFAULT;
   font_normal = LV_FONT_DEFAULT;
@@ -559,7 +561,7 @@ void RB02_Example1(void)
 #ifdef RB_ENABLE_GPS
   Onboard_create_Track(t5);
 #ifdef RB_ENABLE_MAP
-  RB02_GPSMap_CreateScreen(&gpsMapStatus, t0);
+  RB02_GPSMap_CreateScreen(&singletonConfig()->gpsMapStatus, t0);
   lv_obj_add_event_cb(t0, speedBgClicked, LV_EVENT_CLICKED, NULL);
 #endif
 #endif
@@ -572,7 +574,9 @@ void RB02_Example1(void)
 #ifdef RB_ENABLE_GPS
   hasGPS = 1;
 #endif
+#ifdef RB_ENABLE_CONSOLE_DEBUG
   printf("$RB,02,%d,%s,%d,%llX\n", RB_02_DISPLAY_SIZE, RB_VERSION, hasGPS, _chipmacid);
+#endif
 #ifdef RB_ENABLE_CHECKLIST
   RB02_Checklist_CreateScreen(tChecklist, "/sdcard/check.txt");
   lv_obj_add_event_cb(tChecklist, speedBgClicked, LV_EVENT_CLICKED, NULL);
@@ -733,8 +737,6 @@ void nmea_RMC_UpdatedValueFor(uint8_t csvCounter, int32_t finalNumber, uint8_t d
     GPSLateralYAcceleration = 0;
     GPSAccelerationForAttitudeCompensation = 0;
     NMEA_DATA.cog = conversionValue;
-    // Gyroscope alignment managed by the new algorithm
-    // AttitudeYawCorrection = (NMEA_DATA.cog - AttitudeYaw);
     if (NMEA_DATA.cog > 0 && GPSCurrentSpeedKmhForAttitudeComponesation > 3)
     {
 
@@ -759,6 +761,7 @@ void nmea_RMC_UpdatedValueFor(uint8_t csvCounter, int32_t finalNumber, uint8_t d
         float a_lat = GPSCurrentSpeedKmhForAttitudeComponesation * yaw_rate_gps_rad / 3.6;
         GPSLateralYAcceleration = a_lat / G;
 
+#ifdef RB_ENABLE_CONSOLE_DEBUG
         printf("GPS Speed: %.1f Last Speed %.1f Track: %.1f Last Track %.1f DV: %.1f DTrack: %.1f DT: %.5f AY: %.1f AX: %.1f\n",
                GPSCurrentSpeedKmhForAttitudeComponesation,
                GPSLastSpeedKmhForAttitudeComponesation,
@@ -769,7 +772,7 @@ void nmea_RMC_UpdatedValueFor(uint8_t csvCounter, int32_t finalNumber, uint8_t d
                GPSLastSpeedKmhForAttitudeComponesationElapsedTime,
                GPSAccelerationForAttitudeCompensation,
                GPSLateralYAcceleration);
-
+#endif
         if (GPSAccelerationForAttitudeCompensation > 1.5)
           GPSAccelerationForAttitudeCompensation = 1.5;
         if (GPSAccelerationForAttitudeCompensation < -1.5)
@@ -1076,7 +1079,9 @@ void nvsRestoreGMeter()
     switch (err)
     {
     case ESP_OK:
+#ifdef RB_ENABLE_CONSOLE_DEBUG
       printf("pcal = %ld\n", pcal);
+#endif
       break;
     case ESP_ERR_NVS_NOT_FOUND:
       printf("The pcal is not initialized yet!\n");
@@ -1085,7 +1090,7 @@ void nvsRestoreGMeter()
       printf("Error (%s) reading!\n", esp_err_to_name(err));
     }
 
-    bmp280override = pcal;
+    singletonConfig()->bmp280override = pcal;
 
     uint8_t defaultPageOrDemo = 0xff; // value will default to 0, if not set yet in NVS
                                       // 1.1.23 Default is Advanced Attitude Indicator
@@ -1097,7 +1102,9 @@ void nvsRestoreGMeter()
     switch (err)
     {
     case ESP_OK:
+#ifdef RB_ENABLE_CONSOLE_DEBUG
       printf("defaultPageOrDemo = %u\n", defaultPageOrDemo);
+#endif
       break;
     case ESP_ERR_NVS_NOT_FOUND:
       printf("The defaultPageOrDemo is not initialized yet!\n");
@@ -1123,7 +1130,9 @@ void nvsRestoreGMeter()
     switch (err)
     {
     case ESP_OK:
+#ifdef RB_ENABLE_CONSOLE_DEBUG
       printf("GpsSpeed0ForDisable = %ld\n", GpsSpeed0ForDisable);
+#endif
       break;
     case ESP_ERR_NVS_NOT_FOUND:
       printf("The GpsSpeed0ForDisable is not initialized yet!\n");
@@ -1164,19 +1173,20 @@ void nvsRestoreGMeter()
     {
       DriverLoopMilliseconds = 1;
     }
-
+#ifdef RB_ENABLE_CONSOLE_DEBUG
     printf("DriverLoopMilliseconds from NVS ... %d\n", DriverLoopMilliseconds);
-
+#endif
+    // 1.1.24 Warning the Gyro Calibration has being increased to 1000.0 (!)
     int16_t compBuffer = 0;
     nvs_get_i16(my_handle, "calGX", &compBuffer);
-    GyroCalibration.x = compBuffer / 100.0;
+    GyroCalibration.x = compBuffer / RB_GYRO_CALIBRATION_PRECISION;
     nvs_get_i16(my_handle, "calGY", &compBuffer);
-    GyroCalibration.y = compBuffer / 100.0;
+    GyroCalibration.y = compBuffer / RB_GYRO_CALIBRATION_PRECISION;
     nvs_get_i16(my_handle, "calGZ", &compBuffer);
-    GyroCalibration.z = compBuffer / 100.0;
-
+    GyroCalibration.z = compBuffer / RB_GYRO_CALIBRATION_PRECISION;
+#ifdef RB_ENABLE_CONSOLE_DEBUG
     printf("Gyro Calibration %.1f %.1f %.1f\n", GyroCalibration.x, GyroCalibration.z, GyroCalibration.z);
-
+#endif
     nvs_close(my_handle);
   }
 }
@@ -1291,11 +1301,11 @@ void nvsStoreGyroCalibration()
     // Write
     int16_t calBuffer = 0;
 
-    calBuffer = GyroCalibration.x * 100;
+    calBuffer = GyroCalibration.x * RB_GYRO_CALIBRATION_PRECISION;
     nvs_set_i16(my_handle, "calGX", calBuffer);
-    calBuffer = GyroCalibration.y * 100;
+    calBuffer = GyroCalibration.y * RB_GYRO_CALIBRATION_PRECISION;
     nvs_set_i16(my_handle, "calGY", calBuffer);
-    calBuffer = GyroCalibration.z * 100;
+    calBuffer = GyroCalibration.z * RB_GYRO_CALIBRATION_PRECISION;
     nvs_set_i16(my_handle, "calGZ", calBuffer);
     nvs_close(my_handle);
   }
@@ -1314,7 +1324,7 @@ void nvsStorePCal()
   {
     // Read
     printf("Writing pcal from NVS ...\n");
-    err = nvs_set_i32(my_handle, "pcal", bmp280override);
+    err = nvs_set_i32(my_handle, "pcal", singletonConfig()->bmp280override);
     printf((err != ESP_OK) ? "Failed to update bmp280override!\n" : "Done\n");
     nvs_close(my_handle);
   }
@@ -1533,7 +1543,7 @@ int32_t pressureCompensation2(int32_t adc_T, int32_t adc_P)
   var2p = (((int64_t)bmp280Calibration[10]) * p) >> 19;
 
   p = ((p + var1p + var2p) >> 8) + (((int64_t)bmp280Calibration[9]) << 4);
-  bmp280Pressure = bmp280override + (float)(p / 256.0);
+  bmp280Pressure = singletonConfig()->bmp280override + (float)(p / 256.0);
   return bmp280Pressure;
 }
 
@@ -1584,7 +1594,7 @@ uint32_t pressureCompensation(int32_t adc_P)
   var1 = (((BMP280_S64_t)dig_P9) * (p >> 13) * (p >> 13)) >> 25;
   var2 = (((BMP280_S64_t)dig_P8) * p) >> 19;
   p = ((p + var1 + var2) >> 8) + (((BMP280_S64_t)dig_P7) << 4);
-  bmp280Pressure = bmp280override + p / 256;
+  bmp280Pressure = singletonConfig()->bmp280override + p / 256;
   return bmp280Pressure;
 }
 
@@ -1767,10 +1777,14 @@ void readCalibration()
   uint8_t buf[24] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
   I2C_Read(0x76, 0x88, &buf[0], 24);
   /* Endianess. */
+#ifdef RB_ENABLE_CONSOLE_DEBUG
   printf("Calibration: ");
+#endif
   for (int i = 0; i < 12; i++)
   {
+#ifdef RB_ENABLE_CONSOLE_DEBUG
     printf("%X%X ", buf[2 * i + 1], buf[2 * i]);
+#endif
     int16_t signedPass = (((buf[2 * i + 1]) << 8) | buf[2 * i]);
     uint16_t usignedPass = (((buf[2 * i + 1]) << 8) | buf[2 * i]);
     if (i == 0 || i == 3)
@@ -1778,8 +1792,9 @@ void readCalibration()
     else
       bmp280Calibration[i] = signedPass;
   }
+#ifdef RB_ENABLE_CONSOLE_DEBUG
   printf("\n");
-
+#endif
   example1_BMP280_lvgl_tick(NULL);
   Variometer = 0;
 }
@@ -1787,6 +1802,12 @@ void readCalibration()
 void rb_check_attitude_inop()
 {
   Operative_Attitude = 1;
+  if (GyroFiltered.x == 0 || GyroFiltered.y == 0 || GyroFiltered.z == 0)
+  {
+    Operative_Attitude = 0;
+  }
+
+  /* 1.1.24 Calibration is changed. The Community version is simplified
   if (GyroBias.x == 0 || GyroBias.y == 0 || GyroBias.z == 0)
   {
     Operative_Attitude = 0;
@@ -1798,6 +1819,7 @@ void rb_check_attitude_inop()
       Operative_Attitude = 0;
     }
   }
+  */
 }
 
 void RB02_CreateScreens()
@@ -1805,12 +1827,16 @@ void RB02_CreateScreens()
 #ifdef ENABLE_VENDOR
   if (VendorSplashScreenImage == NULL)
   {
-    bool loadInternalSplashscreen = true;
-    if (SDCard_Size > 0)
+    bool loadInternalSplashscreen = false;
+#if ENABLE_VENDOR == RB_VENDOR_1
+    loadInternalSplashscreen = true;
+#endif
+    if (SDCard_Size > 0 && loadInternalSplashscreen == false)
     {
       FILE *f = fopen("/sdcard/SS48016.bmp", "r");
       if (f == NULL)
       {
+        loadInternalSplashscreen = true;
       }
       else
       {
@@ -1843,6 +1869,11 @@ void RB02_CreateScreens()
 
 void rb_increase_lvgl_tick(lv_timer_t *t)
 {
+  // TODO: add a configuration panel
+  uint8_t forcedCalibrationOnBoot = true;
+#ifdef RB_02_DISPLAY_TOUCH
+  forcedCalibrationOnBoot = false;
+#endif
   static int stepDown = 50;
   if (workflow > 100)
   {
@@ -1890,29 +1921,38 @@ void rb_increase_lvgl_tick(lv_timer_t *t)
       Set_Backlight(LCD_Backlight);
       break;
     case 8:
-      GyroBiasAcquire[0].x = GyroFiltered.x + GyroCalibration.x;
-      GyroBiasAcquire[0].y = GyroFiltered.y + GyroCalibration.y;
-      GyroBiasAcquire[0].z = GyroFiltered.z + GyroCalibration.z;
+      if (forcedCalibrationOnBoot == true)
+      {
+        GyroBiasAcquire[0].x = GyroFiltered.x + GyroCalibration.x;
+        GyroBiasAcquire[0].y = GyroFiltered.y + GyroCalibration.y;
+        GyroBiasAcquire[0].z = GyroFiltered.z + GyroCalibration.z;
+      }
       break;
     case 9:
       LCD_Backlight = 100;
       Set_Backlight(LCD_Backlight);
       break;
     case 50:
-      GyroBiasAcquire[1].x = GyroFiltered.x + GyroCalibration.x;
-      GyroBiasAcquire[1].y = GyroFiltered.y + GyroCalibration.y;
-      GyroBiasAcquire[1].z = GyroFiltered.z + GyroCalibration.z;
+      if (forcedCalibrationOnBoot == true)
+      {
+        GyroBiasAcquire[1].x = GyroFiltered.x + GyroCalibration.x;
+        GyroBiasAcquire[1].y = GyroFiltered.y + GyroCalibration.y;
+        GyroBiasAcquire[1].z = GyroFiltered.z + GyroCalibration.z;
+      }
       break;
     case 60:
       lv_obj_clear_flag(OperativeWarning, LV_OBJ_FLAG_HIDDEN);
       break;
     case 80:
-      GyroBiasAcquire[2].x = GyroFiltered.x + GyroCalibration.x;
-      GyroBiasAcquire[2].y = GyroFiltered.y + GyroCalibration.y;
-      GyroBiasAcquire[2].z = GyroFiltered.z + GyroCalibration.z;
-      GyroBias.x = -(GyroBiasAcquire[0].x + GyroBiasAcquire[1].x + GyroBiasAcquire[2].x) / 3.0;
-      GyroBias.y = -(GyroBiasAcquire[0].y + GyroBiasAcquire[1].y + GyroBiasAcquire[2].y) / 3.0;
-      GyroBias.z = -(GyroBiasAcquire[0].z + GyroBiasAcquire[1].z + GyroBiasAcquire[2].z) / 3.0;
+      if (forcedCalibrationOnBoot == true)
+      {
+        GyroBiasAcquire[2].x = GyroFiltered.x + GyroCalibration.x;
+        GyroBiasAcquire[2].y = GyroFiltered.y + GyroCalibration.y;
+        GyroBiasAcquire[2].z = GyroFiltered.z + GyroCalibration.z;
+        GyroBias.x = -(GyroBiasAcquire[0].x + GyroBiasAcquire[1].x + GyroBiasAcquire[2].x) / 3.0;
+        GyroBias.y = -(GyroBiasAcquire[0].y + GyroBiasAcquire[1].y + GyroBiasAcquire[2].y) / 3.0;
+        GyroBias.z = -(GyroBiasAcquire[0].z + GyroBiasAcquire[1].z + GyroBiasAcquire[2].z) / 3.0;
+      }
       rb_check_attitude_inop();
 
       break;
@@ -1994,7 +2034,9 @@ void rb_increase_lvgl_tick(lv_timer_t *t)
 
   if (lastTab != ((lv_tabview_t *)tv)->tab_cur)
   {
+#ifdef RB_ENABLE_CONSOLE_DEBUG
     printf("Tab Changed to: %d\n", (((lv_tabview_t *)tv)->tab_cur));
+#endif
     lastTab = ((lv_tabview_t *)tv)->tab_cur;
     stepDown = 50;
     return;
@@ -2010,28 +2052,28 @@ void rb_increase_lvgl_tick(lv_timer_t *t)
 #endif
     RB02_AdvancedAttitude_Tick(&advancedAttitude_Status, &NMEA_DATA, Altimeter, QNH, Variometer);
     {
-    uint8_t isAttitudeDoNotNeedGPS = 1;
+      uint8_t isAttitudeDoNotNeedGPS = 1;
 #ifdef RB_ENABLE_GPS
-    isAttitudeDoNotNeedGPS = Operative_GPS;
+      isAttitudeDoNotNeedGPS = Operative_GPS;
 #endif
 
-    if (Operative_BMP280 && Operative_Attitude && isAttitudeDoNotNeedGPS && OperativeWarningVisible == true)
-    {
-      lv_obj_add_flag(OperativeWarning, LV_OBJ_FLAG_HIDDEN);
-      OperativeWarningVisible = false;
-    }
-    else
-    {
-      if ((Operative_Attitude == 0 || Operative_BMP280 == 0 || isAttitudeDoNotNeedGPS == 0) && OperativeWarningVisible == false)
+      if (Operative_BMP280 && Operative_Attitude && isAttitudeDoNotNeedGPS && OperativeWarningVisible == true)
       {
-        lv_obj_clear_flag(OperativeWarning, LV_OBJ_FLAG_HIDDEN);
-        OperativeWarningVisible = true;
+        lv_obj_add_flag(OperativeWarning, LV_OBJ_FLAG_HIDDEN);
+        OperativeWarningVisible = false;
       }
       else
       {
+        if ((Operative_Attitude == 0 || Operative_BMP280 == 0 || isAttitudeDoNotNeedGPS == 0) && OperativeWarningVisible == false)
+        {
+          lv_obj_clear_flag(OperativeWarning, LV_OBJ_FLAG_HIDDEN);
+          OperativeWarningVisible = true;
+        }
+        else
+        {
+        }
       }
     }
-  }
     break;
 #endif
 
@@ -2059,7 +2101,7 @@ void rb_increase_lvgl_tick(lv_timer_t *t)
 #ifdef RB_ENABLE_MAP
   case RB02_TAB_MAP:
     uart_fetch_data();
-    RB02_GPSMap_Tick(&gpsMapStatus, &NMEA_DATA, t0);
+    RB02_GPSMap_Tick(&singletonConfig()->gpsMapStatus, &NMEA_DATA, t0);
     if (Operative_GPS && OperativeWarningVisible == true)
     {
       lv_obj_add_flag(OperativeWarning, LV_OBJ_FLAG_HIDDEN);
@@ -2083,6 +2125,11 @@ void rb_increase_lvgl_tick(lv_timer_t *t)
 #ifdef RB_ENABLE_GPS
     uart_fetch_data();
 #endif
+    if (Operative_GPS == true)
+    {
+      // Gyroscope alignment managed by the new algorithm
+      AttitudeYawCorrection = (NMEA_DATA.cog - AttitudeYaw);
+    }
     update_Track_lvgl_tick(t);
 #ifdef RB_ENABLE_GPS
     if (Operative_GPS && OperativeWarningVisible == true)
@@ -2346,7 +2393,6 @@ static void mbox1_timer_reset(lv_event_t *e)
 
   if (code == LV_EVENT_DELETE)
   {
-    printf("Popup closed\n");
     mbox1 = NULL;
   }
 }
@@ -2378,7 +2424,6 @@ static void mbox1_event_cb(lv_event_t *e)
 
   if (code == LV_EVENT_DELETE)
   {
-    printf("Popup closed\n");
     mbox1 = NULL;
   }
 }
@@ -2409,7 +2454,6 @@ static void mbox1_cage_event_cb(lv_event_t *e)
 
   if (code == LV_EVENT_DELETE)
   {
-    printf("Popup closed\n");
     mbox1 = NULL;
   }
 }
@@ -2477,10 +2521,10 @@ static void actionInTab(touchLocation location)
     switch (location)
     {
     case RB02_TOUCH_N:
-      RB02_GPSMap_Touch_N(&gpsMapStatus);
+      RB02_GPSMap_Touch_N(&singletonConfig()->gpsMapStatus);
       break;
     case RB02_TOUCH_S:
-      RB02_GPSMap_Touch_S(&gpsMapStatus);
+      RB02_GPSMap_Touch_S(&singletonConfig()->gpsMapStatus);
       break;
     default:
       break;
@@ -2613,7 +2657,9 @@ static void speedBgClicked(lv_event_t *event)
 
   bool changedTab = false;
   touchLocation location = getTouchLocation(TouchPadLastX, TouchPadLastY);
+#ifdef RB_ENABLE_CONSOLE_DEBUG
   printf("Clicked at %ux%u => %u\n", TouchPadLastX, TouchPadLastY, location);
+#endif
   lv_tabview_t *tabview = (lv_tabview_t *)tv;
   uint16_t cur = tabview->tab_cur;
 
@@ -2670,7 +2716,9 @@ static lv_obj_t *Onboard_create_Base(lv_obj_t *parent, const lv_img_dsc_t *backg
 static void ChangeAttitudeBalanceAlphaChanged(lv_event_t *e)
 {
   uint8_t FilterMoltiplierInt = lv_slider_get_value(lv_event_get_target(e));
+#ifdef RB_ENABLE_CONSOLE_DEBUG
   printf("Changed Filtering ratio from: %.2f to: %d\n", AttitudeBalanceAlpha, FilterMoltiplierInt);
+#endif
   float f = FilterMoltiplierInt;
   AttitudeBalanceAlpha = f / 250.0;
   char buf[23 + 8];
@@ -2722,13 +2770,15 @@ static void AttitudeMadwickChanged(lv_event_t *e)
 static void AltimeterOverrideChanged(lv_event_t *e)
 {
   int32_t FilterMoltiplierInt = lv_slider_get_value(lv_event_get_target(e));
-  printf("Changed BMP280 Override from: %ld to: %ld\n", bmp280override, FilterMoltiplierInt);
-  bmp280override = FilterMoltiplierInt - 500;
+#ifdef RB_ENABLE_CONSOLE_DEBUG
+  printf("Changed BMP280 Override from: %ld to: %ld\n", singletonConfig()->bmp280override, FilterMoltiplierInt);
+#endif
+  singletonConfig()->bmp280override = FilterMoltiplierInt - 500;
 
   example1_BMP280_lvgl_tick(NULL);
 
   char buf[50];
-  sprintf(buf, "Altimeter QNH: %d mmHg %ld feet (%ld)", QNH, Altimeter, bmp280override);
+  sprintf(buf, "Altimeter QNH: %d mmHg %ld feet (%ld)", QNH, Altimeter, singletonConfig()->bmp280override);
   lv_label_set_text(bmp280overrideLabel, buf);
 
   // Store
@@ -2770,7 +2820,9 @@ static void SpeedDegreeStartChanged(lv_event_t *e)
 static void DisableFilteringChanged(lv_event_t *e)
 {
   uint8_t FilterMoltiplierInt = lv_slider_get_value(lv_event_get_target(e));
+#ifdef RB_ENABLE_CONSOLE_DEBUG
   printf("Changed Filtering ratio from: %.1f to: %d\n", FilterMoltiplier, FilterMoltiplierInt);
+#endif
   FilterMoltiplier = FilterMoltiplierInt;
 
   char buf[16 + 8];
@@ -2782,7 +2834,9 @@ static void DisableFilteringChanged(lv_event_t *e)
 static void DisableFilteringOutputChanged(lv_event_t *e)
 {
   uint8_t FilterMoltiplierInt = lv_slider_get_value(lv_event_get_target(e));
+#ifdef RB_ENABLE_CONSOLE_DEBUG
   printf("Changed Filtering ratio from: %.1f to: %d\n", FilterMoltiplierOutput, FilterMoltiplierInt);
+#endif
   FilterMoltiplierOutput = FilterMoltiplierInt;
 
   char buf[16 + 8];
@@ -2794,7 +2848,9 @@ static void DisableFilteringOutputChanged(lv_event_t *e)
 static void DisableFilteringGyroChanged(lv_event_t *e)
 {
   uint8_t FilterMoltiplierInt = lv_slider_get_value(lv_event_get_target(e));
+#ifdef RB_ENABLE_CONSOLE_DEBUG
   printf("Changed Filtering ratio from: %.1f to: %d\n", FilterMoltiplier, FilterMoltiplierInt);
+#endif
   FilterMoltiplierGyro = FilterMoltiplierInt;
 
   char buf[16 + 8];
@@ -2806,7 +2862,9 @@ static void DisableFilteringGyroChanged(lv_event_t *e)
 static void DriverLoopMillisecondsChanged(lv_event_t *e)
 {
   uint8_t FilterMoltiplierInt = lv_slider_get_value(lv_event_get_target(e));
+#ifdef RB_ENABLE_CONSOLE_DEBUG
   printf("Changed Sensor Hz ratio from: %d to: %d\n", DriverLoopMilliseconds, FilterMoltiplierInt);
+#endif
   DriverLoopMilliseconds = FilterMoltiplierInt;
 
   char buf[16 + 8];
@@ -2819,14 +2877,18 @@ static void DriverLoopMillisecondsChanged(lv_event_t *e)
 static void Backlight_adjustment_event_Changed(lv_event_t *e)
 {
   uint8_t Backlight = lv_slider_get_value(lv_event_get_target(e));
+#ifdef RB_ENABLE_CONSOLE_DEBUG
   printf("Changed Backlight ratio from: %d to: %d\n", LCD_Backlight, Backlight);
+#endif
   Set_Backlight(Backlight);
   LCD_Backlight = Backlight;
 }
 static void GMeterMaxChanged(lv_event_t *e)
 {
   uint8_t value = lv_slider_get_value(lv_event_get_target(e));
+#ifdef RB_ENABLE_CONSOLE_DEBUG
   printf("Changed GMeter from: %.1f to: %d\n", GMeterScale, value);
+#endif
   GMeterScale = value;
 }
 
@@ -3188,7 +3250,7 @@ static void Onboard_create_Setup(lv_obj_t *parent)
     lv_obj_set_style_text_align(bmp280overrideLabel, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_set_style_text_font(bmp280overrideLabel, &lv_font_montserrat_16, 0);
     char buf[50];
-    sprintf(buf, "Altimeter QNH: %d mmHg %ld feet (%ld)", QNH, Altimeter, bmp280override);
+    sprintf(buf, "Altimeter QNH: %d mmHg %ld feet (%ld)", QNH, Altimeter, singletonConfig()->bmp280override);
     lv_label_set_text(bmp280overrideLabel, buf);
     lv_obj_add_style(bmp280overrideLabel, &style_title, LV_STATE_DEFAULT);
 
@@ -3974,8 +4036,6 @@ void draw_arch(lv_obj_t *parent, const lv_img_dsc_t *t, uint16_t degreeStartSlid
 {
   for (uint16_t degree = degreeStartSlide; degree <= degreeEndSlide; degree += 15)
   {
-
-    int16_t sin = lv_trigo_sin(degree - 90) / 327;
 
     lv_obj_t *slice = lv_img_create(parent);
     lv_img_set_src(slice, t);

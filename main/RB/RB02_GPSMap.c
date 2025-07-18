@@ -1,10 +1,8 @@
-#pragma once
-
 /**
  * This file is part of RB.
  *
  * Copyright (C) 2024 XIAPROJECTS SRL
- * 
+ *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as published
  * by the Free Software Foundation, version 3.
@@ -22,7 +20,7 @@
  * 02 -> Display with SixPack
  * 03 -> Display with Autopilot, ADSB, Radio, Flight Computer
  * 04 -> Display with EMS: Engine monitoring system
- * 
+ *
  * Community edition will be free for all builders and personal use as defined by the licensing model
  * Dual licensing for commercial agreement is available
  *
@@ -40,9 +38,33 @@
 // #define RB_MAP_MULTI_TILE 1
 extern lv_style_t style_title;
 
-#define RB_02_ZOOM_SUPPORTED 3
-uint8_t zoomSlicerMapper[RB_02_ZOOM_SUPPORTED] = {100, 50, 20};
-#ifdef USE_THIS_TO_EXTRACT_MBTILES
+uint8_t zoomSlicerMapper(int8_t zoomLevel)
+{
+    uint8_t r = 100;
+    switch (zoomLevel)
+    {
+    case 1:
+        r = 50;
+        break;
+    case 2:
+        r = 20;
+        break;
+    default:
+        break;
+    }
+    return r;
+}
+
+uint8_t zoomSlicerMapperMBTiles(int8_t zoomLevel)
+{
+    uint8_t mbTilesMappping[4] = {8, 9, 10, 11};
+    if (zoomLevel < 0)
+        zoomLevel = 0;
+    if (zoomLevel >= sizeof(mbTilesMappping))
+        zoomLevel = sizeof(mbTilesMappping) - 1;
+    return mbTilesMappping[zoomLevel];
+}
+
 // Support for MBTILES
 #define PI 3.14159265358979323846
 
@@ -74,21 +96,21 @@ BBox tile_to_bbox_tms(int x, int y_tms, int z)
 
     double maxLat = lat_rad1 * 180.0 / PI;
     double minLat = lat_rad2 * 180.0 / PI;
+    if(maxLat<0)
+    {
+        maxLat=-maxLat;
+    }
+    if(minLat<0)
+    {
+        minLat=-minLat;
+    }
 
     BBox bbox = {minLon, minLat, maxLon, maxLat};
     return bbox;
 }
-#endif
-
-// 1.1.22 MBTILES support
-typedef struct
-{
-    int x;
-    int y_tms;
-} TileXY;
 
 // Converts latitude, longitude, zoom → tile X/Y (TMS)
-TileXY latlon_to_tile_tms(double lat_deg, double lon_deg, int zoom)
+TileXY latlon_to_tile_xyz(double lat_deg, double lon_deg, int zoom)
 {
     int n = 1 << zoom; // 2^zoom
 
@@ -108,80 +130,71 @@ TileXY latlon_to_tile_tms(double lat_deg, double lon_deg, int zoom)
     // Convert Y to TMS format (Y=0 at bottom)
     int x_tile = (int)floor(x);
     int y_xyz = (int)floor(y);
-    int y_tms = n - 1 - y_xyz;
+    // int y_tms = n - 1 - y_xyz;
 
-    TileXY tile = {x_tile, y_tms};
+    TileXY tile = {x_tile, y_xyz};
     return tile;
 }
 
 void RB02_GPSMap_SquareGenerator(RB02_GpsMapStatus *gpsMapStatus, float centerLatitude, float centerLongitude)
 {
 #ifdef RB_02_ENABLE_EXTERNALMAP
-#ifdef RB_MAP_MULTI_TILE
-    switch (gpsMapStatus->zoomLevel)
+    if (gpsMapStatus->enableMercatoreLatLon == true)
     {
-    case 1:
-        gpsMapStatus->tileSizeWidth = 60;
-        gpsMapStatus->tileSizeHeight = 80;
-        break;
-    case 2:
-        gpsMapStatus->tileSizeWidth = 30;
-        gpsMapStatus->tileSizeHeight = 40;
-        break;
-    default:
-        gpsMapStatus->tileSizeWidth = 96;
-        gpsMapStatus->tileSizeHeight = 120;
-        break;
+        // RB Standard to keep it Rect by decimals
+        gpsMapStatus->tileSizeWidth = 360;
+        gpsMapStatus->tileSizeHeight = 480;
+
+        // TODO: Move this part to a function
+        int16_t centerLatitudeInt = centerLatitude * 100;
+        int16_t centerLongitudeInt = centerLongitude * 100;
+        centerLatitudeInt = (centerLatitudeInt / zoomSlicerMapper(gpsMapStatus->zoomLevel)) * zoomSlicerMapper(gpsMapStatus->zoomLevel);
+        centerLongitudeInt = (centerLongitudeInt / zoomSlicerMapper(gpsMapStatus->zoomLevel)) * zoomSlicerMapper(gpsMapStatus->zoomLevel);
+
+        int32_t latb = centerLatitudeInt + (zoomSlicerMapper(gpsMapStatus->zoomLevel));
+        int32_t late = centerLatitudeInt;
+
+        int32_t lob = centerLongitudeInt;
+        int32_t loe = centerLongitudeInt + (zoomSlicerMapper(gpsMapStatus->zoomLevel));
+
+        if (gpsMapStatus->mapLatitudeBegin != latb || gpsMapStatus->mapLongitudeBegin != lob)
+        {
+            gpsMapStatus->mapDirty = 1;
+        }
+
+        gpsMapStatus->mapLatitudeBegin = latb;
+        gpsMapStatus->mapLatitudeEnd = late;
+        gpsMapStatus->mapLongitudeBegin = lob;
+        gpsMapStatus->mapLongitudeEnd = loe;
     }
-#else
-    gpsMapStatus->tileSizeWidth = 360;
-    gpsMapStatus->tileSizeHeight = 480;
-#endif
-
-    int16_t centerLatitudeInt = centerLatitude * 100;
-    int16_t centerLongitudeInt = centerLongitude * 100;
-    centerLatitudeInt = (centerLatitudeInt / zoomSlicerMapper[gpsMapStatus->zoomLevel]) * zoomSlicerMapper[gpsMapStatus->zoomLevel];
-    centerLongitudeInt = (centerLongitudeInt / zoomSlicerMapper[gpsMapStatus->zoomLevel]) * zoomSlicerMapper[gpsMapStatus->zoomLevel];
-
-#ifdef RB_MAP_MULTI_TILE
-    int cx = SCREEN_WIDTH / gpsMapStatus->tileSizeWidth;
-    int cy = SCREEN_HEIGHT / gpsMapStatus->tileSizeHeight;
-    int32_t latb = 10 * centerLatitudeInt + (zoomSlicerMapper[gpsMapStatus->zoomLevel] * cx) / 2;
-    int32_t late = 10 * centerLatitudeInt - (zoomSlicerMapper[gpsMapStatus->zoomLevel] * cx) / 2;
-
-    int32_t lob = 10 * centerLongitudeInt - (zoomSlicerMapper[gpsMapStatus->zoomLevel] * cy) / 2;
-    int32_t loe = 10 * centerLongitudeInt + (zoomSlicerMapper[gpsMapStatus->zoomLevel] * cy) / 2;
-#else
-    int32_t latb = centerLatitudeInt + (zoomSlicerMapper[gpsMapStatus->zoomLevel]);
-    int32_t late = centerLatitudeInt;
-
-    int32_t lob = centerLongitudeInt;
-    int32_t loe = centerLongitudeInt + (zoomSlicerMapper[gpsMapStatus->zoomLevel]);
-#endif
-    if (gpsMapStatus->mapLatitudeBegin != latb || gpsMapStatus->mapLongitudeBegin != lob)
+    else
     {
-        gpsMapStatus->mapDirty = 1;
+        // MBTiles standard
+        gpsMapStatus->tileSizeWidth = 256;
+        gpsMapStatus->tileSizeHeight = 256;
+
+        TileXY tileCoordinates = latlon_to_tile_xyz(centerLatitude, centerLongitude, zoomSlicerMapperMBTiles(gpsMapStatus->zoomLevel));
+        BBox box = tile_to_bbox_tms(tileCoordinates.x, tileCoordinates.y_tms, zoomSlicerMapperMBTiles(gpsMapStatus->zoomLevel));
+
+        gpsMapStatus->mapLatitudeBegin = box.minLat*100;
+        gpsMapStatus->mapLatitudeEnd = box.maxLat*100;
+        gpsMapStatus->mapLongitudeBegin = box.minLon*100;
+        gpsMapStatus->mapLongitudeEnd = box.maxLon*100;
+
+        if (tileCoordinates.x != gpsMapStatus->lastTile.x || tileCoordinates.y_tms != gpsMapStatus->lastTile.y_tms)
+        {
+            gpsMapStatus->mapDirty = 1;
+        }
     }
 
-    gpsMapStatus->mapLatitudeBegin = latb;
-    gpsMapStatus->mapLatitudeEnd = late;
-    gpsMapStatus->mapLongitudeBegin = lob;
-    gpsMapStatus->mapLongitudeEnd = loe;
-
-    printf("RB02_GPSMap_SquareGenerator {%d %d},%f,%f, %ld %ld  %ld %ld\n", centerLatitudeInt, centerLongitudeInt, centerLatitude, centerLongitude, gpsMapStatus->mapLongitudeBegin, gpsMapStatus->mapLongitudeEnd, gpsMapStatus->mapLatitudeBegin, gpsMapStatus->mapLatitudeEnd);
+    printf("RB02_GPSMap_SquareGenerator %f,%f, %ld %ld  %ld %ld\n", centerLatitude, centerLongitude, gpsMapStatus->mapLongitudeBegin, gpsMapStatus->mapLongitudeEnd, gpsMapStatus->mapLatitudeBegin, gpsMapStatus->mapLatitudeEnd);
 #endif
 }
 
 void RB02_GPSMap_Touch_N(RB02_GpsMapStatus *gpsMapStatus)
 {
 #ifdef RB_02_ENABLE_EXTERNALMAP
-    if (gpsMapStatus->zoomLevel + 1 >= RB_02_ZOOM_SUPPORTED)
-    {
-    }
-    else
-    {
-        gpsMapStatus->zoomLevel++;
-    }
+    gpsMapStatus->zoomLevel++;
     gpsMapStatus->mapLatitudeBegin = 0;
     gpsMapStatus->latitude100 = 0;
 #endif
@@ -203,7 +216,7 @@ void RB02_GPSMap_Touch_S(RB02_GpsMapStatus *gpsMapStatus)
 
 void RB02_GPSMap_ReloadTiles(RB02_GpsMapStatus *gpsMapStatus, gps_t *gpsStatus, lv_obj_t *parent)
 {
-
+#ifdef RB_02_ENABLE_EXTERNALMAP
     //
     char filename[41];
 
@@ -236,24 +249,40 @@ void RB02_GPSMap_ReloadTiles(RB02_GpsMapStatus *gpsMapStatus, gps_t *gpsStatus, 
             */
 
             //= 43660
-#ifdef RB_MAP_MULTI_TILE
-            int32_t currentLatitudeTile = (gpsMapStatus->mapLatitudeBegin - y * zoomSlicerMapper[gpsMapStatus->zoomLevel]) / zoomSlicerMapper[gpsMapStatus->zoomLevel];
-            int32_t currentLongitudeTile = (gpsMapStatus->mapLongitudeBegin + x * zoomSlicerMapper[gpsMapStatus->zoomLevel]) / zoomSlicerMapper[gpsMapStatus->zoomLevel];
-#else
-            int32_t currentLatitudeTile = (gpsMapStatus->mapLatitudeBegin);
-            int32_t currentLongitudeTile = (gpsMapStatus->mapLongitudeBegin);
-#endif
 
             // 1.1.22
             if (gpsMapStatus->enableMercatoreLatLon == true)
             {
-                uint8_t folderIndex = 100 / zoomSlicerMapper[gpsMapStatus->zoomLevel];
+#ifdef RB_MAP_MULTI_TILE
+                int32_t currentLatitudeTile = (gpsMapStatus->mapLatitudeBegin - y * zoomSlicerMapper(gpsMapStatus->zoomLevel)) / zoomSlicerMapper(gpsMapStatus->zoomLevel);
+                int32_t currentLongitudeTile = (gpsMapStatus->mapLongitudeBegin + x * zoomSlicerMapper(gpsMapStatus->zoomLevel)) / zoomSlicerMapper(gpsMapStatus->zoomLevel);
+#else
+                int32_t currentLatitudeTile = (gpsMapStatus->mapLatitudeBegin);
+                int32_t currentLongitudeTile = (gpsMapStatus->mapLongitudeBegin);
+#endif
+
+                uint8_t folderIndex = 100 / zoomSlicerMapper(gpsMapStatus->zoomLevel);
                 snprintf(filename, sizeof(filename), "S:/z%d/%04ld%04ld.bmp", folderIndex, currentLatitudeTile, currentLongitudeTile);
             }
             else
             {
-                TileXY tileCoordinates = latlon_to_tile_tms(gpsStatus->latitude,gpsStatus->longitude, gpsMapStatus->zoomLevel);
-                snprintf(filename, sizeof(filename), "S:/%d/%d_%d.bmp", gpsMapStatus->zoomLevel, tileCoordinates.x, tileCoordinates.y_tms);
+                TileXY tileCoordinates = latlon_to_tile_xyz(gpsStatus->latitude, gpsStatus->longitude, zoomSlicerMapperMBTiles(gpsMapStatus->zoomLevel));
+
+                snprintf(filename, sizeof(filename), "/sdcard/%d/%d/%d.bmp", zoomSlicerMapperMBTiles(gpsMapStatus->zoomLevel), tileCoordinates.x, tileCoordinates.y_tms);
+                // Test file exists:
+                FILE *f = fopen(filename, "r");
+                if (f == NULL)
+                {
+                    printf("Try to open: %s FAILURE\n", filename);
+                }
+                else
+                {
+                    printf("Try to open: %s SUCCESS\n", filename);
+                    fclose(f);
+                }
+                snprintf(filename, sizeof(filename), "S:/%d/%d/%d.bmp", zoomSlicerMapperMBTiles(gpsMapStatus->zoomLevel), tileCoordinates.x, tileCoordinates.y_tms);
+
+                gpsMapStatus->lastTile = tileCoordinates;
             }
             lv_label_set_text(gpsMapStatus->labelTilePath, filename);
             lv_img_set_src(backgroundImage, filename);
@@ -276,6 +305,88 @@ void RB02_GPSMap_ReloadTiles(RB02_GpsMapStatus *gpsMapStatus, gps_t *gpsStatus, 
     lv_obj_move_foreground(gpsMapStatus->labelLatitude);
     lv_obj_move_foreground(gpsMapStatus->labelLongitude);
     gpsMapStatus->mapDirty = 0;
+#endif
+}
+
+void RB02_GPSMap_ReloadMBTilesLoadTile(RB02_GpsMapStatus *gpsMapStatus, uint8_t index, lv_obj_t *parent, const char *filename,int16_t ox,int16_t oy,int16_t w,int16_t h,int16_t lx,int16_t ly)
+{
+
+    lv_obj_t *backgroundImage = gpsMapStatus->tiles[index];
+    if (backgroundImage == NULL)
+    {
+        backgroundImage = lv_img_create(parent);
+        gpsMapStatus->tiles[index] = backgroundImage;
+    }
+    else
+    {
+    }
+
+    lv_label_set_text(gpsMapStatus->labelTilePath, filename);
+    lv_img_set_src(backgroundImage, filename);
+    lv_obj_align(backgroundImage, LV_ALIGN_CENTER, lx, ly);
+    //lv_img_set_pivot(backgroundImage, 0, 0); 
+    lv_img_set_offset_x(backgroundImage,-ox);
+    lv_img_set_offset_y(backgroundImage,-oy);
+    lv_obj_set_size(backgroundImage, w, h);
+    lv_obj_set_scrollbar_mode(backgroundImage, LV_SCROLLBAR_MODE_OFF);
+}
+
+void RB02_GPSMap_ReloadMBTiles(RB02_GpsMapStatus *gpsMapStatus, gps_t *gpsStatus, lv_obj_t *parent)
+{
+#ifdef RB_02_ENABLE_EXTERNALMAP
+    //
+    char filename[41];
+    TileXY tileCoordinates = latlon_to_tile_xyz(gpsStatus->latitude, gpsStatus->longitude, zoomSlicerMapperMBTiles(gpsMapStatus->zoomLevel));
+    
+
+    uint16_t widthMax = 256;
+    uint8_t widthMedium = 112;
+    uint8_t widthSmall = 72;
+    
+    uint8_t w=widthSmall;
+    snprintf(filename, sizeof(filename), "S:/%d/%d/%d.bmp", zoomSlicerMapperMBTiles(gpsMapStatus->zoomLevel), tileCoordinates.x-1, tileCoordinates.y_tms-1);
+    RB02_GPSMap_ReloadMBTilesLoadTile(gpsMapStatus, 0, parent, filename,    widthMax-w,widthMax-w,w,w,-widthMax/2-w/2,-widthMax/2-w/2);
+
+    w=widthMedium;
+    snprintf(filename, sizeof(filename), "S:/%d/%d/%d.bmp", zoomSlicerMapperMBTiles(gpsMapStatus->zoomLevel), tileCoordinates.x, tileCoordinates.y_tms-1);
+    RB02_GPSMap_ReloadMBTilesLoadTile(gpsMapStatus, 1, parent, filename,    0,widthMax-w,widthMax,w,0,-widthMax/2-w/2);
+
+    w=widthSmall;
+    snprintf(filename, sizeof(filename), "S:/%d/%d/%d.bmp", zoomSlicerMapperMBTiles(gpsMapStatus->zoomLevel), tileCoordinates.x+1, tileCoordinates.y_tms-1);
+    RB02_GPSMap_ReloadMBTilesLoadTile(gpsMapStatus, 2, parent, filename,    0,widthMax-w,w,w,widthMax/2+w/2,-widthMax/2-w/2);
+
+    w=widthMedium;
+    snprintf(filename, sizeof(filename), "S:/%d/%d/%d.bmp", zoomSlicerMapperMBTiles(gpsMapStatus->zoomLevel), tileCoordinates.x-1, tileCoordinates.y_tms);
+    RB02_GPSMap_ReloadMBTilesLoadTile(gpsMapStatus, 3, parent, filename,    widthMax-w,0,w,widthMax,-widthMax/2-w/2,0);
+
+    snprintf(filename, sizeof(filename), "S:/%d/%d/%d.bmp", zoomSlicerMapperMBTiles(gpsMapStatus->zoomLevel), tileCoordinates.x, tileCoordinates.y_tms);
+    RB02_GPSMap_ReloadMBTilesLoadTile(gpsMapStatus, 4, parent, filename,    0,0,widthMax,widthMax,0,0);
+
+    w=widthMedium;
+    snprintf(filename, sizeof(filename), "S:/%d/%d/%d.bmp", zoomSlicerMapperMBTiles(gpsMapStatus->zoomLevel), tileCoordinates.x+1, tileCoordinates.y_tms);
+    RB02_GPSMap_ReloadMBTilesLoadTile(gpsMapStatus, 5, parent, filename,    0,0,w,widthMax,widthMax/2+w/2,0);
+
+    w=widthSmall;
+    snprintf(filename, sizeof(filename), "S:/%d/%d/%d.bmp", zoomSlicerMapperMBTiles(gpsMapStatus->zoomLevel), tileCoordinates.x-1, tileCoordinates.y_tms+1);
+    RB02_GPSMap_ReloadMBTilesLoadTile(gpsMapStatus, 6, parent, filename,    widthMax-w,0,w,w,-widthMax/2-w/2,widthMax/2+w/2);
+
+    w=widthMedium;
+    snprintf(filename, sizeof(filename), "S:/%d/%d/%d.bmp", zoomSlicerMapperMBTiles(gpsMapStatus->zoomLevel), tileCoordinates.x, tileCoordinates.y_tms+1);
+    RB02_GPSMap_ReloadMBTilesLoadTile(gpsMapStatus, 7, parent, filename,    0,0,widthMax,w,0,widthMax/2+w/2);
+
+    w=widthSmall;
+    snprintf(filename, sizeof(filename), "S:/%d/%d/%d.bmp", zoomSlicerMapperMBTiles(gpsMapStatus->zoomLevel), tileCoordinates.x+1, tileCoordinates.y_tms+1);
+    RB02_GPSMap_ReloadMBTilesLoadTile(gpsMapStatus, 8, parent, filename,    0,0,w,w,widthMax/2+w/2,widthMax/2+w/2);
+
+
+    lv_obj_move_foreground(gpsMapStatus->poiMy);
+    lv_obj_move_foreground(gpsMapStatus->labelLatitude);
+    lv_obj_move_foreground(gpsMapStatus->labelLongitude);
+
+    gpsMapStatus->lastTile = tileCoordinates;
+    gpsMapStatus->mapDirty = 0;
+
+#endif
 }
 
 lv_obj_t *RB02_GPSMap_CreateScreen(RB02_GpsMapStatus *gpsMapStatus, lv_obj_t *parent)
@@ -291,7 +402,36 @@ lv_obj_t *RB02_GPSMap_CreateScreen(RB02_GpsMapStatus *gpsMapStatus, lv_obj_t *pa
     // 1.1.22
     // true=Mercatore means: z%d/%d%d.bmp zoom,lat,lon
     // false=XYZ projection z%d/%d_%d.bmp zoom,x,y
+
+#ifdef RB_02_ENABLE_EXTERNALMAP
     gpsMapStatus->enableMercatoreLatLon = false;
+    for (int x = 0; x < 9; x++)
+    {
+        gpsMapStatus->tiles[x] = NULL;
+    }
+#else
+
+#endif
+    if (true)
+    {
+        lv_obj_t *label = lv_label_create(parent);
+        lv_obj_set_size(label, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+        lv_obj_align(label, LV_ALIGN_CENTER, 0, -200);
+        lv_obj_add_style(label, &style_title, LV_STATE_DEFAULT);
+        lv_obj_set_style_text_font(label, &lv_font_montserrat_48, 0);
+        lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
+        lv_label_set_text(label, "GPS Map");
+    }
+    if (true)
+    {
+        lv_obj_t *label = lv_label_create(parent);
+        lv_obj_set_size(label, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+        lv_obj_align(label, LV_ALIGN_CENTER, 0, 0);
+        lv_obj_set_style_text_font(label, &lv_font_montserrat_48, 0);
+        lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
+        lv_label_set_text(label, "-------");
+        gpsMapStatus->labelTilePath = label;
+    }
 
 #ifdef RB_02_ENABLE_INTERNALMAP
 
@@ -313,31 +453,15 @@ lv_obj_t *RB02_GPSMap_CreateScreen(RB02_GpsMapStatus *gpsMapStatus, lv_obj_t *pa
     gpsMapStatus->mapLongitudeEnd = 125000;
 
     //
-    gpsMapStatus->mapLatitudeBegin = 43660;
-    gpsMapStatus->mapLongitudeBegin = 11460;
-    gpsMapStatus->mapLatitudeEnd = 42980;
-    gpsMapStatus->mapLongitudeEnd = 12350;
-#endif
+    gpsMapStatus->mapLatitudeBegin = 4366;
+    gpsMapStatus->mapLongitudeBegin = 1146;
+    gpsMapStatus->mapLatitudeEnd = 4298;
+    gpsMapStatus->mapLongitudeEnd = 1235;
 
-#ifdef RB_02_ENABLE_EXTERNALMAP
-    for (int x = 0; x < (SCREEN_WIDTH / RB_02_ENABLE_EXTERNALMAP_WIDTH) * (SCREEN_WIDTH / RB_02_ENABLE_EXTERNALMAP_WIDTH); x++)
-    {
-        gpsMapStatus->tiles[x] = NULL;
-    }
-#else
+    gpsMapStatus->tileSizeWidth = 480;
+    gpsMapStatus->tileSizeHeight = 480;
 
 #endif
-    if (true)
-    {
-        lv_obj_t *label = lv_label_create(parent);
-        lv_obj_set_size(label, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
-        lv_obj_align(label, LV_ALIGN_CENTER, 0, -200);
-        lv_obj_add_style(label, &style_title, LV_STATE_DEFAULT);
-        lv_obj_set_style_text_font(label, &lv_font_montserrat_48, 0);
-        lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
-        lv_label_set_text(label, "GPS Map");
-    }
-
 
     if (true)
     {
@@ -349,17 +473,6 @@ lv_obj_t *RB02_GPSMap_CreateScreen(RB02_GpsMapStatus *gpsMapStatus, lv_obj_t *pa
         lv_obj_set_style_radius(poi, LV_RADIUS_CIRCLE, 0);
         lv_obj_clear_flag(poi, LV_OBJ_FLAG_CLICKABLE);
         gpsMapStatus->poiMy = poi;
-    }
-
-    if (true)
-    {
-        lv_obj_t *label = lv_label_create(parent);
-        lv_obj_set_size(label, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
-        lv_obj_align(label, LV_ALIGN_CENTER, 0, 0);
-        lv_obj_set_style_text_font(label, &lv_font_montserrat_48, 0);
-        lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
-        lv_label_set_text(label, "-------");
-        gpsMapStatus->labelTilePath = label;
     }
 
     if (true)
@@ -392,8 +505,8 @@ void RB02_GPSMap_Tick(RB02_GpsMapStatus *gpsMapStatus, gps_t *gpsStatus, lv_obj_
 
     // Some example GPS Coordinates
     // Arezzo
-    // gpsStatus->latitude= 43.45513012173618;
-    // gpsStatus->longitude=11.847354299755676;
+    //gpsStatus->latitude = 43.45513012173618;
+    //gpsStatus->longitude = 11.847354299755676;
     // gpsStatus->latitude= 43.11126;
     // gpsStatus->longitude = 12.08190;
 
@@ -421,12 +534,20 @@ void RB02_GPSMap_Tick(RB02_GpsMapStatus *gpsMapStatus, gps_t *gpsStatus, lv_obj_
     {
         return;
     }
-
+#ifdef RB_02_ENABLE_EXTERNALMAP
     if (gpsMapStatus->mapDirty != 0)
     {
-        RB02_GPSMap_ReloadTiles(gpsMapStatus, gpsStatus, parent);
-    }
+        if (gpsMapStatus->enableMercatoreLatLon == true)
+        {
+            RB02_GPSMap_ReloadTiles(gpsMapStatus, gpsStatus, parent);
+        }
+        else
 
+        {
+            RB02_GPSMap_ReloadMBTiles(gpsMapStatus, gpsStatus, parent);
+        }
+    }
+#endif
     char buf[20];
     snprintf(buf, sizeof(buf), "LAT:%.5f", gpsStatus->latitude);
     lv_label_set_text(gpsMapStatus->labelLatitude, buf);
@@ -436,7 +557,16 @@ void RB02_GPSMap_Tick(RB02_GpsMapStatus *gpsMapStatus, gps_t *gpsStatus, lv_obj_
     //
 
     float longitudeEscursion = (gpsMapStatus->mapLongitudeEnd - gpsMapStatus->mapLongitudeBegin);
-    float latitudeEscursion = -(gpsMapStatus->mapLatitudeEnd - gpsMapStatus->mapLatitudeBegin);
+    float latitudeEscursion = (gpsMapStatus->mapLatitudeEnd - gpsMapStatus->mapLatitudeBegin);
+
+    if (latitudeEscursion < 0)
+    {
+        latitudeEscursion = -latitudeEscursion;
+    }
+    if (longitudeEscursion < 0)
+    {
+        longitudeEscursion = -longitudeEscursion;
+    }
 
     gpsMapStatus->latitude100 = currLat100;
     gpsMapStatus->longitude100 = currLon100;

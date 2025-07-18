@@ -25,7 +25,6 @@
  * Dual licensing for commercial agreement is available
  *
 */
-#pragma once
 #include "RB02_GPSDiag.h"
 
 #ifdef RB_ENABLE_GPS_DIAG
