@@ -1,4 +1,5 @@
 #include "LVGL_Driver.h"
+#include "RB02.h"
 
 static const char *LVGL_TAG = "LVGL";   
 lv_disp_draw_buf_t disp_buf; // contains internal graphic buffer(s) called draw buffer(s)
@@ -19,6 +20,7 @@ void example_lvgl_flush_cb(lv_disp_drv_t *drv, const lv_area_t *area, lv_color_t
     int offsetx2 = area->x2;
     int offsety1 = area->y1;
     int offsety2 = area->y2;
+
 #if CONFIG_EXAMPLE_AVOID_TEAR_EFFECT_WITH_SEM
     xSemaphoreGive(sem_gui_ready);
     xSemaphoreTake(sem_vsync_end, portMAX_DELAY);
@@ -73,9 +75,9 @@ void LVGL_Init(void)
     lv_disp_draw_buf_init(&disp_buf, buf1, buf2, EXAMPLE_LCD_H_RES * EXAMPLE_LCD_V_RES);
 #else
     ESP_LOGI(LVGL_TAG, "Allocate separate LVGL draw buffers from PSRAM");
-    buf1 = heap_caps_malloc(EXAMPLE_LCD_H_RES  * EXAMPLE_LCD_V_RES, MALLOC_CAP_SPIRAM);
+    buf1 = heap_caps_malloc(EXAMPLE_LCD_H_RES  * EXAMPLE_LCD_V_RES, MALLOC_CAP_DMA | MALLOC_CAP_SPIRAM);
     assert(buf1);
-    buf2 = heap_caps_malloc(EXAMPLE_LCD_H_RES  * EXAMPLE_LCD_V_RES, MALLOC_CAP_SPIRAM);
+    buf2 = heap_caps_malloc(EXAMPLE_LCD_H_RES  * EXAMPLE_LCD_V_RES, MALLOC_CAP_DMA | MALLOC_CAP_SPIRAM);
     assert(buf2);
     // initialize LVGL draw buffers
     lv_disp_draw_buf_init(&disp_buf, buf1, buf2, EXAMPLE_LCD_H_RES * EXAMPLE_LCD_V_RES);
@@ -101,6 +103,7 @@ void LVGL_Init(void)
     };
 
     /********************* LVGL *********************/
+#ifdef RB_02_DISPLAY_TOUCH
     ESP_LOGI(LVGL_TAG,"Register display indev to LVGL");
     lv_indev_drv_init ( &indev_drv );
     indev_drv.type = LV_INDEV_TYPE_POINTER;
@@ -108,6 +111,7 @@ void LVGL_Init(void)
     indev_drv.read_cb = example_touchpad_read;
     indev_drv.user_data = tp;
     lv_indev_drv_register( &indev_drv );
+#endif
 
     ESP_ERROR_CHECK(esp_timer_create(&lvgl_tick_timer_args, &lvgl_tick_timer));
     ESP_ERROR_CHECK(esp_timer_start_periodic(lvgl_tick_timer, EXAMPLE_LVGL_TICK_PERIOD_MS * 1000));

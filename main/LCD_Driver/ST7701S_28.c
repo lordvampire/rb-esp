@@ -38,7 +38,7 @@ ST7701S_handle ST7701S_newObject(int SDA, int SCL, int CS, char channel_select, 
 
         st7701s_handle->st7701s_protocol_config_t.command_bits = 1;
         st7701s_handle->st7701s_protocol_config_t.address_bits = 8;
-        st7701s_handle->st7701s_protocol_config_t.clock_speed_hz = 4000000;
+        st7701s_handle->st7701s_protocol_config_t.clock_speed_hz = 40000000;
         st7701s_handle->st7701s_protocol_config_t.mode = 0;
         st7701s_handle->st7701s_protocol_config_t.spics_io_num = CS;
         st7701s_handle->st7701s_protocol_config_t.queue_size = 1;
@@ -441,7 +441,7 @@ void LCD_Init(void)
         .psram_trans_align = 64,
         .num_fbs = EXAMPLE_LCD_NUM_FB,
 #if CONFIG_EXAMPLE_USE_BOUNCE_BUFFER
-        .bounce_buffer_size_px = 10 * EXAMPLE_LCD_H_RES,
+        .bounce_buffer_size_px = 20 * EXAMPLE_LCD_H_RES,
 #endif
         .clk_src = LCD_CLK_SRC_DEFAULT,
         .disp_gpio_num = EXAMPLE_PIN_NUM_DISP_EN,
@@ -499,7 +499,7 @@ void LCD_Init(void)
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Backlight program
 
-uint8_t LCD_Backlight = 70;
+uint8_t LCD_Backlight = 0;
 static ledc_channel_config_t ledc_channel;
 void Backlight_Init(void)
 {

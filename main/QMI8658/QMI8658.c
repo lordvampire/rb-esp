@@ -1,3 +1,57 @@
+/**
+ * This file is part of RB.
+ *
+ * Copyright (C) 2024 XIAPROJECTS SRL
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as published
+ * by the Free Software Foundation, version 3.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU Affero General Public License for more details.
+ *
+ * You should have received a copy of the GNU Affero General Public License
+ * along with this program. If not, see <https://www.gnu.org/licenses/>.
+
+ * This source is part of the project RB:
+ * 01 -> Display with Synthetic vision, Autopilot and ADSB
+ * 02 -> Display with SixPack
+ * 03 -> Display with Autopilot, ADSB, Radio, Flight Computer
+ * 04 -> Display with EMS: Engine monitoring system
+ *
+ * Community edition will be free for all builders and personal use as defined by the licensing model
+ * Dual licensing for commercial agreement is available
+ *
+ * Starting from version 1.1.3 both of displays are supported: 2.8 and 2.1
+ *
+ * RB02.c
+ * Implementation of RoastBeef PN 02 The basic six pack version
+ *
+ * Features:
+ * - GPS Speed -> Requires NMEA TTL RS232 GPS Reveiver such as ublox
+ * - Attitude indicator
+ * - Turn & Slip
+ * - GPS Gyro-Track -> Requires NMEA TTL RS232 GPS Reveiver such as ublox
+ * - Altimeter
+ * - Variometer
+ * - Chronometer
+ *
+ * Demo Features:
+ * - Synthetic vision lateral, implemented in RB-01
+ * - Synthetic vision front, implemented in RB-01
+ *
+ * Integrated Features:
+ * - Speed indicator
+ * - Track indicator
+ * - Radar display
+ * - GPS Time
+ *
+ * Supported hardware:
+ * - ESP32-S3 2.8" Inch Round display 480x480
+ * - https://www.waveshare.com/esp32-s3-touch-lcd-2.8c.htm
+ */
 #include "QMI8658.h"
 #include "lvgl.h"
 #include "madgwick.h"
@@ -478,7 +532,10 @@ void getGFactor(void)
     }
     if (GFactor > GFactorMax)
     {
+#ifdef RB_ENABLE_CONSOLE_DEBUG
         printf("GMeter new Max %f %f", GFactor, GFactorMax);
+        printf("\n");
+#endif
         GFactorMax = GFactor;
         AccelFilteredMax.x = AccelFiltered.x;
         AccelFilteredMax.y = AccelFiltered.y;
@@ -486,7 +543,10 @@ void getGFactor(void)
     }
     if (GFactor < GFactorMin)
     {
+#ifdef RB_ENABLE_CONSOLE_DEBUG
         printf("GMeter new min %f %f", GFactor, GFactorMin);
+        printf("\n");
+#endif
         GFactorMin = GFactor;
         GFactorDirty = 1;
     }

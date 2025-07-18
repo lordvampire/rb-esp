@@ -11,6 +11,7 @@ idf_component_register(
                               "SD_Card/SD_MMC.c"
                               "RB/RB02.c"
                               "RB/RB02_Checklist.c"
+                              "RB/RB02_Config.c"
                               "RB/RB02_GPSMap.c"
                               "RB/RB02_AAttitude.c"
                               "RB/RB02_Altimeter.c"
