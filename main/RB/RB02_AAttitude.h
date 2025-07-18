@@ -48,7 +48,8 @@ typedef struct
     lv_obj_t *lv_track;
     lv_obj_t *lv_gmeter;
     lv_obj_t *lv_variometer;
-    lv_obj_t *lv_altimeter;
+    lv_obj_t *lv_altimeterM;
+    lv_obj_t *lv_altimeterF;
     lv_obj_t *lv_altimeter_unit;
     lv_obj_t *lv_altimeter_background;
     lv_obj_t *lv_qnh;
@@ -66,6 +67,7 @@ typedef struct
     int8_t AttitudeRoll;
     int16_t Speed;
     int16_t Track;
+    uint8_t advancedAttitudeMaxHeigh100;
 } RB02_AdvancedAttitude_Status;
 
 

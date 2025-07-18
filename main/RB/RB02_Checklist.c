@@ -1,5 +1,3 @@
-#pragma once
-
 /**
  * This file is part of RB.
  *
@@ -47,8 +45,6 @@ lv_obj_t *RB02_Checklist_Addline(lv_obj_t *parent, char *line)
     lv_label_set_text(label, line);
     // lv_label_set_long_mode(label, LV_LABEL_LONG_SCROLL);
     lv_label_set_long_mode(label, LV_LABEL_LONG_WRAP);
-
-    printf("%d\n", lv_obj_get_height(label));
     return label;
 }
 

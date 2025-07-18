@@ -1,5 +1,3 @@
-#pragma once
-
 /**
  * This file is part of RB.
  *
@@ -51,7 +49,7 @@ extern uint16_t speedRed;
 extern float AttitudeYawDegreePerSecond;
 extern uint16_t QNH;
 extern IMUdata AccelFiltered;
-
+extern const lv_res_t Screen_TurnSlip_Obj_Ball_Size;
 extern float AttitudePitch;
 extern float AttitudeRoll;
 
@@ -79,7 +77,7 @@ void RB02_AdvancedAttitude_RollPitchAlign(RB02_AdvancedAttitude_Status *aaStatus
     lv_img_set_angle(aaStatus->lv_roll, -roll * 10.0);
 }
 
-void RB02_AdvancedAttitude_MoveItems(lv_obj_t *item, int16_t degree, int16_t displacementX, int16_t displacementY)
+int16_t RB02_AdvancedAttitude_MoveItems(lv_obj_t *item, int16_t degree, int16_t displacementX, int16_t displacementY)
 {
     int16_t sin = lv_trigo_sin(degree - 90) / 327;
     int16_t cos = lv_trigo_cos(degree - 90) / 327;
@@ -88,6 +86,7 @@ void RB02_AdvancedAttitude_MoveItems(lv_obj_t *item, int16_t degree, int16_t dis
     int16_t y = (sin * 230) / 100;
 
     lv_obj_align(item, LV_ALIGN_CENTER, x+displacementX, y+displacementY);
+    return y+displacementY;
 }
 
 int16_t RB02_AdvancedAttitude_ProgressBoth(RB02_AdvancedAttitude_Status *aaStatus, int32_t value, int32_t start, int32_t end)
@@ -134,23 +133,42 @@ void RB02_AdvancedAttitude_Tick(RB02_AdvancedAttitude_Status *aaStatus, gps_t *g
 {
     char buf[10];
 
-    int32_t AltimeterInFeet = Altimeter / 100.0;
+    int16_t AltimeterInFeet = Altimeter / 100.0;
 
     if (aaStatus->Altimeter != AltimeterInFeet)
     {
         aaStatus->Altimeter = AltimeterInFeet;
-        snprintf(buf, sizeof(buf), "%ld", AltimeterInFeet);
-        lv_label_set_text(aaStatus->lv_altimeter, buf);
+        if(AltimeterInFeet>100)
+        {
+        snprintf(buf, sizeof(buf), "%02d", AltimeterInFeet%100);
+        lv_label_set_text(aaStatus->lv_altimeterF, buf);
+        snprintf(buf, sizeof(buf), "%d", AltimeterInFeet/100);
+        lv_label_set_text(aaStatus->lv_altimeterM, buf);
+        }
+        else
+        {
+        snprintf(buf, sizeof(buf), "%d", AltimeterInFeet);
+        lv_label_set_text(aaStatus->lv_altimeterF, buf);
+        lv_label_set_text(aaStatus->lv_altimeterM, "");
+        }
 
-        int16_t degreeAltimeterInFeet = RB_AAT_START_RIGHT_ARC - RB02_AdvancedAttitude_ProgressBoth(aaStatus, AltimeterInFeet, 0, 10000);
-        RB02_AdvancedAttitude_MoveItems(aaStatus->lv_altimeter, degreeAltimeterInFeet,0,0);
+        // 1.1.24 Auto Scale Height
+        if(aaStatus->advancedAttitudeMaxHeigh100*100<AltimeterInFeet)
+        {
+            aaStatus->advancedAttitudeMaxHeigh100=AltimeterInFeet/100;
+        }
+
+        int16_t degreeAltimeterInFeet = RB_AAT_START_RIGHT_ARC - RB02_AdvancedAttitude_ProgressBoth(aaStatus, AltimeterInFeet, 0, aaStatus->advancedAttitudeMaxHeigh100*100);
+        int16_t lineY=SCREEN_HEIGHT/2+RB02_AdvancedAttitude_MoveItems(aaStatus->lv_altimeterF, degreeAltimeterInFeet,46,0);
+        RB02_AdvancedAttitude_MoveItems(aaStatus->lv_altimeterM, degreeAltimeterInFeet,-42,0);
         RB02_AdvancedAttitude_MoveItems(aaStatus->lv_altimeter_background, degreeAltimeterInFeet,0,0);
         RB02_AdvancedAttitude_MoveItems(aaStatus->lv_altimeter_unit, degreeAltimeterInFeet,0,-34);
-        RB02_AdvancedAttitude_MoveItems(aaStatus->lv_variometer, degreeAltimeterInFeet,0,+34);
+        RB02_AdvancedAttitude_MoveItems(aaStatus->lv_variometer, degreeAltimeterInFeet,0,+36);
 
         for (int position = 0; position < RB_AAT_ARC_NUMBERS; position++)
         {
-            if (AltimeterInFeet / 500 > position)
+            lv_coord_t y=lv_obj_get_y(aaStatus->lv_right_arcs[position]);
+            if (lineY-32<y)
             {
                 lv_obj_clear_flag(aaStatus->lv_right_arcs[position], LV_OBJ_FLAG_HIDDEN);
             }
@@ -158,6 +176,7 @@ void RB02_AdvancedAttitude_Tick(RB02_AdvancedAttitude_Status *aaStatus, gps_t *g
             {
                 lv_obj_add_flag(aaStatus->lv_right_arcs[position], LV_OBJ_FLAG_HIDDEN);
             }
+        
         }
     }
 
@@ -178,7 +197,7 @@ void RB02_AdvancedAttitude_Tick(RB02_AdvancedAttitude_Status *aaStatus, gps_t *g
         RB02_AdvancedAttitude_MoveItems(aaStatus->lv_speed, degreeSpeed,0,0);
         RB02_AdvancedAttitude_MoveItems(aaStatus->lv_speed_background, degreeSpeed,0,0);
         RB02_AdvancedAttitude_MoveItems(aaStatus->lv_speed_unit, degreeSpeed,0,-34);
-        RB02_AdvancedAttitude_MoveItems(aaStatus->lv_gmeter, degreeSpeed,0,+34);
+        RB02_AdvancedAttitude_MoveItems(aaStatus->lv_gmeter, degreeSpeed,0,+36);
 
     }
 
@@ -369,6 +388,7 @@ lv_obj_t *RB02_AdvancedAttitude_CreateScreen(RB02_AdvancedAttitude_Status *aaSta
     aaStatus->AttitudeRoll = 1;
     aaStatus->Speed = 1;
     aaStatus->Track = 1;
+    aaStatus->advancedAttitudeMaxHeigh100 = 3500/100;
 
     if (aaStatus->lv_parent != NULL)
     {
@@ -559,17 +579,27 @@ lv_obj_t *RB02_AdvancedAttitude_CreateScreen(RB02_AdvancedAttitude_Status *aaSta
 
         aaStatus->lv_speed_background = backgroundImage;
     }
-
     if (aaStatus->lv_parent != NULL)
     {
         lv_obj_t *label = lv_label_create(aaStatus->lv_parent);
-        lv_obj_set_size(label, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+        lv_obj_set_size(label, 88, LV_SIZE_CONTENT);
         lv_obj_align(label, LV_ALIGN_CENTER, 155, 0);
-        lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
+        lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_LEFT, 0);
+        lv_obj_set_style_text_font(label, &lv_font_montserrat_32, 0);
+        lv_obj_set_style_text_color(label, lv_color_white(), 0);
+
+        aaStatus->lv_altimeterF = label;
+    }
+    if (aaStatus->lv_parent != NULL)
+    {
+        lv_obj_t *label = lv_label_create(aaStatus->lv_parent);
+        lv_obj_set_size(label, 88, LV_SIZE_CONTENT);
+        lv_obj_align(label, LV_ALIGN_CENTER, 155, 0);
+        lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_RIGHT, 0);
         lv_obj_set_style_text_font(label, &lv_font_montserrat_48, 0);
         lv_obj_set_style_text_color(label, lv_color_white(), 0);
 
-        aaStatus->lv_altimeter = label;
+        aaStatus->lv_altimeterM = label;
     }
 
     if (aaStatus->lv_parent != NULL)
