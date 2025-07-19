@@ -331,53 +331,104 @@ void RB02_GPSMap_ReloadMBTilesLoadTile(RB02_GpsMapStatus *gpsMapStatus, uint8_t 
     lv_obj_set_scrollbar_mode(backgroundImage, LV_SCROLLBAR_MODE_OFF);
 }
 
+uint8_t RB02_CheckfileExists(const char *filename)
+{
+    uint8_t ret = 0;
+    // Test file exists:
+    FILE *f = fopen(filename, "r");
+    if (f == NULL)
+    {
+    }
+    else
+    {
+        ret = 1;
+        fclose(f);
+    }
+
+    return ret;
+}
+
 void RB02_GPSMap_ReloadMBTiles(RB02_GpsMapStatus *gpsMapStatus, gps_t *gpsStatus, lv_obj_t *parent)
 {
 #ifdef RB_02_ENABLE_EXTERNALMAP
     //
     char filename[41];
     TileXY tileCoordinates = latlon_to_tile_xyz(gpsStatus->latitude, gpsStatus->longitude, zoomSlicerMapperMBTiles(gpsMapStatus->zoomLevel));
-    
 
     uint16_t widthMax = 256;
     uint8_t widthMedium = 112;
     uint8_t widthSmall = 72;
-    
-    uint8_t w=widthSmall;
-    snprintf(filename, sizeof(filename), "S:/%d/%d/%d.bmp", zoomSlicerMapperMBTiles(gpsMapStatus->zoomLevel), tileCoordinates.x-1, tileCoordinates.y_tms-1);
-    RB02_GPSMap_ReloadMBTilesLoadTile(gpsMapStatus, 0, parent, filename,    widthMax-w,widthMax-w,w,w,-widthMax/2-w/2,-widthMax/2-w/2);
 
-    w=widthMedium;
-    snprintf(filename, sizeof(filename), "S:/%d/%d/%d.bmp", zoomSlicerMapperMBTiles(gpsMapStatus->zoomLevel), tileCoordinates.x, tileCoordinates.y_tms-1);
-    RB02_GPSMap_ReloadMBTilesLoadTile(gpsMapStatus, 1, parent, filename,    0,widthMax-w,widthMax,w,0,-widthMax/2-w/2);
+    uint8_t w = widthSmall;
+    snprintf(filename, sizeof(filename), "%s/%d/%d/%d.bmp", "/sdcard", zoomSlicerMapperMBTiles(gpsMapStatus->zoomLevel), tileCoordinates.x - 1, tileCoordinates.y_tms - 1);
+    if (RB02_CheckfileExists(filename) == 1)
+    {
+        snprintf(filename, sizeof(filename), "%s/%d/%d/%d.bmp", "S:", zoomSlicerMapperMBTiles(gpsMapStatus->zoomLevel), tileCoordinates.x - 1, tileCoordinates.y_tms - 1);
+        RB02_GPSMap_ReloadMBTilesLoadTile(gpsMapStatus, 0, parent, filename, widthMax - w, widthMax - w, w, w, -widthMax / 2 - w / 2, -widthMax / 2 - w / 2);
+    }
 
-    w=widthSmall;
-    snprintf(filename, sizeof(filename), "S:/%d/%d/%d.bmp", zoomSlicerMapperMBTiles(gpsMapStatus->zoomLevel), tileCoordinates.x+1, tileCoordinates.y_tms-1);
-    RB02_GPSMap_ReloadMBTilesLoadTile(gpsMapStatus, 2, parent, filename,    0,widthMax-w,w,w,widthMax/2+w/2,-widthMax/2-w/2);
+    snprintf(filename, sizeof(filename), "%s/%d/%d/%d.bmp", "/sdcard", zoomSlicerMapperMBTiles(gpsMapStatus->zoomLevel), tileCoordinates.x, tileCoordinates.y_tms - 1);
+    if (RB02_CheckfileExists(filename) == 1)
+    {
+        w = widthMedium;
+        snprintf(filename, sizeof(filename), "S:/%d/%d/%d.bmp", zoomSlicerMapperMBTiles(gpsMapStatus->zoomLevel), tileCoordinates.x, tileCoordinates.y_tms - 1);
+        RB02_GPSMap_ReloadMBTilesLoadTile(gpsMapStatus, 1, parent, filename, 0, widthMax - w, widthMax, w, 0, -widthMax / 2 - w / 2);
+    }
 
-    w=widthMedium;
-    snprintf(filename, sizeof(filename), "S:/%d/%d/%d.bmp", zoomSlicerMapperMBTiles(gpsMapStatus->zoomLevel), tileCoordinates.x-1, tileCoordinates.y_tms);
-    RB02_GPSMap_ReloadMBTilesLoadTile(gpsMapStatus, 3, parent, filename,    widthMax-w,0,w,widthMax,-widthMax/2-w/2,0);
+    snprintf(filename, sizeof(filename), "%s/%d/%d/%d.bmp", "/sdcard", zoomSlicerMapperMBTiles(gpsMapStatus->zoomLevel), tileCoordinates.x + 1, tileCoordinates.y_tms - 1);
+    if (RB02_CheckfileExists(filename) == 1)
+    {
+        w = widthSmall;
+        snprintf(filename, sizeof(filename), "S:/%d/%d/%d.bmp", zoomSlicerMapperMBTiles(gpsMapStatus->zoomLevel), tileCoordinates.x + 1, tileCoordinates.y_tms - 1);
+        RB02_GPSMap_ReloadMBTilesLoadTile(gpsMapStatus, 2, parent, filename, 0, widthMax - w, w, w, widthMax / 2 + w / 2, -widthMax / 2 - w / 2);
+    }
 
-    snprintf(filename, sizeof(filename), "S:/%d/%d/%d.bmp", zoomSlicerMapperMBTiles(gpsMapStatus->zoomLevel), tileCoordinates.x, tileCoordinates.y_tms);
-    RB02_GPSMap_ReloadMBTilesLoadTile(gpsMapStatus, 4, parent, filename,    0,0,widthMax,widthMax,0,0);
+    snprintf(filename, sizeof(filename), "%s/%d/%d/%d.bmp", "/sdcard", zoomSlicerMapperMBTiles(gpsMapStatus->zoomLevel), tileCoordinates.x - 1, tileCoordinates.y_tms);
+    if (RB02_CheckfileExists(filename) == 1)
+    {
+        w = widthMedium;
+        snprintf(filename, sizeof(filename), "S:/%d/%d/%d.bmp", zoomSlicerMapperMBTiles(gpsMapStatus->zoomLevel), tileCoordinates.x - 1, tileCoordinates.y_tms);
+        RB02_GPSMap_ReloadMBTilesLoadTile(gpsMapStatus, 3, parent, filename, widthMax - w, 0, w, widthMax, -widthMax / 2 - w / 2, 0);
+    }
+    snprintf(filename, sizeof(filename), "%s/%d/%d/%d.bmp", "/sdcard", zoomSlicerMapperMBTiles(gpsMapStatus->zoomLevel), tileCoordinates.x, tileCoordinates.y_tms);
+    if (RB02_CheckfileExists(filename) == 1)
+    {
+        snprintf(filename, sizeof(filename), "S:/%d/%d/%d.bmp", zoomSlicerMapperMBTiles(gpsMapStatus->zoomLevel), tileCoordinates.x, tileCoordinates.y_tms);
+        RB02_GPSMap_ReloadMBTilesLoadTile(gpsMapStatus, 4, parent, filename, 0, 0, widthMax, widthMax, 0, 0);
+    }
+    lv_label_set_text(gpsMapStatus->labelTilePath, filename);
 
-    w=widthMedium;
-    snprintf(filename, sizeof(filename), "S:/%d/%d/%d.bmp", zoomSlicerMapperMBTiles(gpsMapStatus->zoomLevel), tileCoordinates.x+1, tileCoordinates.y_tms);
-    RB02_GPSMap_ReloadMBTilesLoadTile(gpsMapStatus, 5, parent, filename,    0,0,w,widthMax,widthMax/2+w/2,0);
+    snprintf(filename, sizeof(filename), "%s/%d/%d/%d.bmp", "/sdcard", zoomSlicerMapperMBTiles(gpsMapStatus->zoomLevel), tileCoordinates.x + 1, tileCoordinates.y_tms);
+    if (RB02_CheckfileExists(filename) == 1)
+    {
+        w = widthMedium;
+        snprintf(filename, sizeof(filename), "S:/%d/%d/%d.bmp", zoomSlicerMapperMBTiles(gpsMapStatus->zoomLevel), tileCoordinates.x + 1, tileCoordinates.y_tms);
+        RB02_GPSMap_ReloadMBTilesLoadTile(gpsMapStatus, 5, parent, filename, 0, 0, w, widthMax, widthMax / 2 + w / 2, 0);
+    }
 
-    w=widthSmall;
-    snprintf(filename, sizeof(filename), "S:/%d/%d/%d.bmp", zoomSlicerMapperMBTiles(gpsMapStatus->zoomLevel), tileCoordinates.x-1, tileCoordinates.y_tms+1);
-    RB02_GPSMap_ReloadMBTilesLoadTile(gpsMapStatus, 6, parent, filename,    widthMax-w,0,w,w,-widthMax/2-w/2,widthMax/2+w/2);
+    snprintf(filename, sizeof(filename), "%s/%d/%d/%d.bmp", "/sdcard", zoomSlicerMapperMBTiles(gpsMapStatus->zoomLevel), tileCoordinates.x - 1, tileCoordinates.y_tms + 1);
+    if (RB02_CheckfileExists(filename) == 1)
+    {
+        w = widthSmall;
+        snprintf(filename, sizeof(filename), "S:/%d/%d/%d.bmp", zoomSlicerMapperMBTiles(gpsMapStatus->zoomLevel), tileCoordinates.x - 1, tileCoordinates.y_tms + 1);
+        RB02_GPSMap_ReloadMBTilesLoadTile(gpsMapStatus, 6, parent, filename, widthMax - w, 0, w, w, -widthMax / 2 - w / 2, widthMax / 2 + w / 2);
+    }
 
-    w=widthMedium;
-    snprintf(filename, sizeof(filename), "S:/%d/%d/%d.bmp", zoomSlicerMapperMBTiles(gpsMapStatus->zoomLevel), tileCoordinates.x, tileCoordinates.y_tms+1);
-    RB02_GPSMap_ReloadMBTilesLoadTile(gpsMapStatus, 7, parent, filename,    0,0,widthMax,w,0,widthMax/2+w/2);
+    snprintf(filename, sizeof(filename), "%s/%d/%d/%d.bmp", "/sdcard", zoomSlicerMapperMBTiles(gpsMapStatus->zoomLevel), tileCoordinates.x, tileCoordinates.y_tms + 1);
+    if (RB02_CheckfileExists(filename) == 1)
+    {
+        w = widthMedium;
+        snprintf(filename, sizeof(filename), "S:/%d/%d/%d.bmp", zoomSlicerMapperMBTiles(gpsMapStatus->zoomLevel), tileCoordinates.x, tileCoordinates.y_tms + 1);
+        RB02_GPSMap_ReloadMBTilesLoadTile(gpsMapStatus, 7, parent, filename, 0, 0, widthMax, w, 0, widthMax / 2 + w / 2);
+    }
 
-    w=widthSmall;
-    snprintf(filename, sizeof(filename), "S:/%d/%d/%d.bmp", zoomSlicerMapperMBTiles(gpsMapStatus->zoomLevel), tileCoordinates.x+1, tileCoordinates.y_tms+1);
-    RB02_GPSMap_ReloadMBTilesLoadTile(gpsMapStatus, 8, parent, filename,    0,0,w,w,widthMax/2+w/2,widthMax/2+w/2);
-
+    snprintf(filename, sizeof(filename), "%s/%d/%d/%d.bmp", "/sdcard", zoomSlicerMapperMBTiles(gpsMapStatus->zoomLevel), tileCoordinates.x + 1, tileCoordinates.y_tms + 1);
+    if (RB02_CheckfileExists(filename) == 1)
+    {
+        w = widthSmall;
+        snprintf(filename, sizeof(filename), "S:/%d/%d/%d.bmp", zoomSlicerMapperMBTiles(gpsMapStatus->zoomLevel), tileCoordinates.x + 1, tileCoordinates.y_tms + 1);
+        RB02_GPSMap_ReloadMBTilesLoadTile(gpsMapStatus, 8, parent, filename, 0, 0, w, w, widthMax / 2 + w / 2, widthMax / 2 + w / 2);
+    }
 
     lv_obj_move_foreground(gpsMapStatus->poiMy);
     lv_obj_move_foreground(gpsMapStatus->labelLatitude);
