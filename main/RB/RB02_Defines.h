@@ -67,7 +67,7 @@
 //#define RB_ENABLE_CONSOLE_DEBUG 1
 
 // 1.1.2 Version is here
-#define RB_VERSION "1.1.24"
+#define RB_VERSION "1.1.25"
 // 1.1.1 Remove tabs with GPS if not installed
 #define RB_ENABLE_GPS 1
 // 1.1.19 Starting getting rid of demo screens

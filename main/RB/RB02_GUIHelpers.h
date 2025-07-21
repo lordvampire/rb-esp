@@ -30,3 +30,4 @@
 #include "RB02.h"
 
 lv_obj_t *RB02_GUIHelpers_CreateBase(lv_obj_t *parent, const lv_img_dsc_t *backgroundImageName);
+uint8_t RB02_CheckfileExists(const char *filename);

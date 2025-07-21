@@ -26,6 +26,7 @@
  *
 */
 #include "RB02_GUIHelpers.h"
+#include <stdio.h>
 
 lv_obj_t *RB02_GUIHelpers_CreateBase(lv_obj_t *parent, const lv_img_dsc_t *backgroundImageName)
 {
@@ -40,4 +41,22 @@ lv_obj_t *RB02_GUIHelpers_CreateBase(lv_obj_t *parent, const lv_img_dsc_t *backg
     // 1.1.9 Remove scrolling for Turbolence touch screen
     lv_obj_clear_flag(parent, LV_OBJ_FLAG_SCROLLABLE);
     return backgroundImage;
+}
+
+
+uint8_t RB02_CheckfileExists(const char *filename)
+{
+    uint8_t ret = 0;
+    // Test file exists:
+    FILE *f = fopen(filename, "r");
+    if (f == NULL)
+    {
+    }
+    else
+    {
+        ret = 1;
+        fclose(f);
+    }
+
+    return ret;
 }

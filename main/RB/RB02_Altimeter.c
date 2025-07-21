@@ -25,7 +25,6 @@
  * Dual licensing for commercial agreement is available
  *
 */
-#pragma once
 #include "RB02_Altimeter.h"
 #include "RB02_GUIHelpers.h"
 #include <stdio.h>

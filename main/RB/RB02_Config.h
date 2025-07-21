@@ -31,6 +31,10 @@
 #include "lvgl.h"
 #include "RB02_Defines.h"
 
+#ifdef RB_ENABLE_GPS
+#include "RB02_NMEA.h"
+#endif
+
 #ifdef RB_ENABLE_MAP
 #include "RB02_GPSMap.h"
 #endif
@@ -45,6 +49,9 @@ typedef struct
     uint8_t structureVersion;
 #ifdef RB_ENABLE_DATALOGGER
     uint8_t settingsEnableDataLoggerRecording;
+#endif
+#ifdef RB_ENABLE_GPS
+    gps_t NMEA_DATA;
 #endif
 #ifdef RB_ENABLE_MAP
 RB02_GpsMapStatus gpsMapStatus;
