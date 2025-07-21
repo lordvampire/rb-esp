@@ -216,6 +216,7 @@ void nvsStoreUARTBaudrate();
 static void CreateSingleDigit(lv_obj_t *parent, const lv_img_dsc_t *font, lv_obj_t **segments, int dx, int dy);
 void nvsStoreGMeter();
 void nvsRestoreGMeter();
+void disableTVScroll();
 
 // Variables
 
@@ -558,6 +559,7 @@ void RB02_Example1(void)
 #ifdef RB_ENABLE_MAP
   RB02_GPSMap_CreateScreen(&singletonConfig()->gpsMapStatus, t0);
   lv_obj_add_event_cb(t0, speedBgClicked, LV_EVENT_CLICKED, NULL);
+  lv_obj_clear_flag(t0, LV_OBJ_FLAG_GESTURE_BUBBLE);
 #endif
 #endif
   Onboard_create_Variometer(t6);
@@ -645,6 +647,11 @@ void RB02_Example1(void)
   lv_obj_align(OperativeWarning, LV_ALIGN_CENTER, 0, 200);
   lv_obj_set_scrollbar_mode(OperativeWarning, LV_SCROLLBAR_MODE_OFF);
 
+  disableTVScroll();
+}
+
+void disableTVScroll()
+{
   lv_obj_clear_flag(tv, LV_OBJ_FLAG_SCROLLABLE);
   lv_obj_clear_flag(tv, LV_OBJ_FLAG_SCROLL_CHAIN_HOR);
   lv_obj_clear_flag(tv, LV_OBJ_FLAG_SCROLL_CHAIN_VER);
@@ -1204,6 +1211,14 @@ void nvsRestoreGMeter()
 #ifdef RB_ENABLE_CONSOLE_DEBUG
     printf("Gyro Calibration %.1f %.1f %.1f\n", GyroCalibration.x, GyroCalibration.z, GyroCalibration.z);
 #endif
+
+
+    // 1.1.25B
+    int32_t i32buffer=0;
+    nvs_get_i32(my_handle, "latitude100", &i32buffer);
+    singletonConfig()->NMEA_DATA.latitude = i32buffer/100.0;
+    nvs_get_i32(my_handle, "longitude100", &i32buffer);
+    singletonConfig()->NMEA_DATA.longitude= i32buffer/100.0;
     nvs_close(my_handle);
   }
 }
@@ -2711,9 +2726,9 @@ static void speedBgClicked(lv_event_t *event)
   case RB02_TOUCH_E:
     cur++;
     changedTab = true;
-    if (cur >= RB02_TAB_SET - 1)
+    if (cur >= RB02_TAB_DEV)
     {
-      cur = RB02_TAB_SET - 1;
+      cur = RB02_TAB_SET;
     }
     break;
   default:
@@ -3065,10 +3080,12 @@ static void Onboard_create_Setup(lv_obj_t *parent)
     lv_obj_set_style_text_align(VersionLabel, LV_TEXT_ALIGN_CENTER, 0);
     lv_label_set_text(VersionLabel, "Engine Time:");
     lv_obj_add_style(VersionLabel, &style_title, LV_STATE_DEFAULT);
-    lineY += 30;
+    lineY += 40;
 
     SettingsEngineTimeLabel = VersionLabel;
   }
+
+
   // 1.1.6
   if (true)
   {
@@ -3820,6 +3837,9 @@ static void Onboard_create_Setup(lv_obj_t *parent)
     lv_obj_add_style(VersionLabel, &style_title, LV_STATE_DEFAULT);
     lineY += 20;
   }
+
+
+  lv_obj_add_event_cb(parent, speedBgClicked, LV_EVENT_CLICKED, NULL);
 }
 
 static void Onboard_create_Clock(lv_obj_t *parent)

@@ -32,8 +32,6 @@
 #include <math.h>
 #include "RB02_GUIHelpers.h"
 
-#define RB_ENABLE_CONSOLE_DEBUG 1
-
 #ifdef RB_02_ENABLE_INTERNALMAP
 #include "images/GPSMapInternal.c"
 #endif
@@ -353,7 +351,6 @@ void RB02_GPSMap_ReloadMBTilesLoadTile(RB02_GpsMapStatus *gpsMapStatus, uint8_t 
 
 void RB02_GPSMap_ReloadMBTiles(RB02_GpsMapStatus *gpsMapStatus, gps_t *gpsStatus, lv_obj_t *parent)
 {
-    printf("RB02_GPSMap_ReloadMBTiles START %X\n", gpsMapStatus->mapDirty);
 #ifdef RB_02_ENABLE_EXTERNALMAP
     //
     char filename[41];
@@ -373,7 +370,6 @@ void RB02_GPSMap_ReloadMBTiles(RB02_GpsMapStatus *gpsMapStatus, gps_t *gpsStatus
         }
         lv_label_set_text(gpsMapStatus->labelTilePath, filename);
         gpsMapStatus->mapDirty = gpsMapStatus->mapDirty & ~RB_GPS_MAP_TILE_C;
-        printf("RB02_GPSMap_ReloadMBTiles EXIT %X\n", gpsMapStatus->mapDirty);
         return;
     }
 
@@ -489,8 +485,6 @@ void RB02_GPSMap_ReloadMBTiles(RB02_GpsMapStatus *gpsMapStatus, gps_t *gpsStatus
     }
 
 #endif
-
-    printf("RB02_GPSMap_ReloadMBTiles FINISH %X\n", gpsMapStatus->mapDirty);
 }
 
 lv_obj_t *RB02_GPSMap_CreateScreen(RB02_GpsMapStatus *gpsMapStatus, lv_obj_t *parent)
