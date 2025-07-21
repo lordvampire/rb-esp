@@ -56,7 +56,6 @@
  */
 #include "RB02.h"
 
-
 // Images pre-loaded
 #ifdef ENABLE_DEMO_SCREENS
 #include "RoundSynthViewAttitude.c"
@@ -113,16 +112,13 @@
 #include "PCF85063.h"
 #include "RB02_SDCardInject.c"
 
-
-
 #define Backlight_MAX 100
 void Set_Backlight(uint8_t Light);
 int64_t esp_timer_get_time(void);
-void Backlight_adjustment_event_cb(lv_event_t * e);
+void Backlight_adjustment_event_cb(lv_event_t *e);
 
 void LVGL_Backlight_adjustment(uint8_t Backlight);
 void draw_arch(lv_obj_t *parent, const lv_img_dsc_t *t, uint16_t degreeStartSlide, uint16_t degreeEndSlide);
-
 
 extern uint8_t DriverLoopMilliseconds; // 1.1.9 Anti precession
 extern float BAT_analogVolts;          // 1.1.4 Power management
@@ -150,7 +146,6 @@ extern uint8_t GFactorDirty;
 #define CONFIG_NMEA_PARSER_UART_RXD 44
 #define CONFIG_NMEA_STATEMENT_RMC 1
 
-gps_t NMEA_DATA;
 int16_t AttitudeYawCorrection = 0;
 
 // 1.1.12 Fusion
@@ -650,12 +645,10 @@ void RB02_Example1(void)
   lv_obj_align(OperativeWarning, LV_ALIGN_CENTER, 0, 200);
   lv_obj_set_scrollbar_mode(OperativeWarning, LV_SCROLLBAR_MODE_OFF);
 
-  /*
-    lv_obj_clear_flag(tv, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_clear_flag(tv, LV_OBJ_FLAG_SCROLL_CHAIN_HOR);
-    lv_obj_clear_flag(tv, LV_OBJ_FLAG_SCROLL_CHAIN_VER);
-    lv_obj_clear_flag(lv_tabview_get_content(tv), LV_OBJ_FLAG_SCROLLABLE);
-    */
+  lv_obj_clear_flag(tv, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_clear_flag(tv, LV_OBJ_FLAG_SCROLL_CHAIN_HOR);
+  lv_obj_clear_flag(tv, LV_OBJ_FLAG_SCROLL_CHAIN_VER);
+  lv_obj_clear_flag(lv_tabview_get_content(tv), LV_OBJ_FLAG_SCROLLABLE);
 }
 
 lv_obj_t *RB_LV_Helper_CreateImageFromFile(lv_obj_t *parent, const void *backgroundImageName)
@@ -682,10 +675,66 @@ void nmea_GGA_UpdatedValueFor(uint8_t csvCounter, int32_t finalNumber, uint8_t d
   }
   switch (csvCounter)
   {
+  case 0: // GGA
+    /* code */
+    break;
+  case 1: // UTC Time
+    /* code */
+    break;
+  case 2: // Lat
+    /* code */
+    break;
+  case 3: // N/S
+    /* code */
+    break;
+  case 4: // Long
+    /* code */
+    break;
+  case 5: // E/W
+    /* code */
+    break;
+  case 6: // GPS Status
+    /* code */
+    // Operative_GPS = sentence[x] - '0';
+    Operative_GPS = finalNumber;
+    singletonConfig()->NMEA_DATA.valid = Operative_GPS > 0 ? true : false;
+    singletonConfig()->NMEA_DATA.fix = Operative_GPS;
+    switch (Operative_GPS)
+    {
+    case 0:
+      singletonConfig()->NMEA_DATA.fix_mode = GPS_MODE_INVALID;
+      break;
+    case 1:
+      // TODO: FIX MODE
+      singletonConfig()->NMEA_DATA.fix_mode = GPS_MODE_3D;
+      break;
+    }
+
+    // printf("GGA: %d\n",sentence[x]-'0');
+    break;
+  case 7: // # sats
+          /* code */
+    singletonConfig()->NMEA_DATA.sats_in_view = finalNumber;
+#ifdef RB_ENABLE_CONSOLE_DEBUG
+    printf("Number of SAT: %d\n", singletonConfig()->NMEA_DATA.sats_in_view);
+#endif
+    break;
+  case 8: // hdop
+    /* code */
+    singletonConfig()->NMEA_DATA.dop_h = conversionValue;
+    break;
   case 9: // ALT MT
-    NMEA_DATA.altitude = (conversionValue + NMEA_DATA.altitude * 2.0) / 3.0;
+    singletonConfig()->NMEA_DATA.altitude = (conversionValue + singletonConfig()->NMEA_DATA.altitude * 2.0) / 3.0;
+    break;
+  case 10: // a-units
+    /* code */
+    break;
+  default:
     break;
   }
+#ifdef RB_ENABLE_CONSOLE_DEBUG
+  printf("GGA: %d %ld %f\n", csvCounter, finalNumber, conversionValue);
+#endif
 }
 
 #define DEG2RAD (3.14159265359f / 180.0f)
@@ -704,10 +753,10 @@ void nmea_RMC_UpdatedValueFor(uint8_t csvCounter, int32_t finalNumber, uint8_t d
     /* code */
     break;
   case 1: // UTC hhmmss.ss
-    NMEA_DATA.tim.thousand = finalNumber % 100;
-    NMEA_DATA.tim.second = (finalNumber / 100) % 100;
-    NMEA_DATA.tim.minute = (finalNumber / 10000) % 100;
-    NMEA_DATA.tim.hour = (finalNumber / 1000000);
+    singletonConfig()->NMEA_DATA.tim.thousand = finalNumber % 100;
+    singletonConfig()->NMEA_DATA.tim.second = (finalNumber / 100) % 100;
+    singletonConfig()->NMEA_DATA.tim.minute = (finalNumber / 10000) % 100;
+    singletonConfig()->NMEA_DATA.tim.hour = (finalNumber / 1000000);
     /* code */
     break;
   case 2: // A
@@ -715,33 +764,39 @@ void nmea_RMC_UpdatedValueFor(uint8_t csvCounter, int32_t finalNumber, uint8_t d
     break;
   case 3: // 4311.11936
     /* code */
-    NMEA_DATA.latitude = conversionValue / 100.0;
+    if (finalNumber != 0)
+    {
+      singletonConfig()->NMEA_DATA.latitude = conversionValue / 100.0;
+    }
     break;
   case 4: // N
     /* code */
     break;
   case 5: // 01208.18660
     /* code */
-    NMEA_DATA.longitude = conversionValue / 100.0;
+    if (finalNumber != 0)
+    {
+      singletonConfig()->NMEA_DATA.longitude = conversionValue / 100.0;
+    }
     break;
   case 6: // E
     /* code */
     break;
   case 7: // Speed KT
-    NMEA_DATA.speed = conversionValue * 1.852;
-    GPSCurrentSpeedKmhForAttitudeComponesation = NMEA_DATA.speed;
+    singletonConfig()->NMEA_DATA.speed = conversionValue * 1.852;
+    GPSCurrentSpeedKmhForAttitudeComponesation = singletonConfig()->NMEA_DATA.speed;
     /* code */
     break;
   case 8: // Track
           /* code */
     GPSLateralYAcceleration = 0;
     GPSAccelerationForAttitudeCompensation = 0;
-    NMEA_DATA.cog = conversionValue;
-    if (NMEA_DATA.cog > 0 && GPSCurrentSpeedKmhForAttitudeComponesation > 3)
+    singletonConfig()->NMEA_DATA.cog = conversionValue;
+    if (singletonConfig()->NMEA_DATA.cog > 0 && GPSCurrentSpeedKmhForAttitudeComponesation > 3)
     {
 
       // 1.1.12 Fusion
-      FusionAHRSDeltaTrackFromGPS = NMEA_DATA.cog - GPSLastTrack;
+      FusionAHRSDeltaTrackFromGPS = singletonConfig()->NMEA_DATA.cog - GPSLastTrack;
 
       if (FusionAHRSDeltaTrackFromGPS > 180.0f)
         FusionAHRSDeltaTrackFromGPS -= 360.0f;
@@ -765,7 +820,7 @@ void nmea_RMC_UpdatedValueFor(uint8_t csvCounter, int32_t finalNumber, uint8_t d
         printf("GPS Speed: %.1f Last Speed %.1f Track: %.1f Last Track %.1f DV: %.1f DTrack: %.1f DT: %.5f AY: %.1f AX: %.1f\n",
                GPSCurrentSpeedKmhForAttitudeComponesation,
                GPSLastSpeedKmhForAttitudeComponesation,
-               NMEA_DATA.cog,
+               singletonConfig()->NMEA_DATA.cog,
                GPSLastTrack,
                DV,
                FusionAHRSDeltaTrackFromGPS,
@@ -793,7 +848,7 @@ void nmea_RMC_UpdatedValueFor(uint8_t csvCounter, int32_t finalNumber, uint8_t d
     }
 
     GPSLastSpeedKmhForAttitudeComponesation = GPSCurrentSpeedKmhForAttitudeComponesation;
-    GPSLastTrack = NMEA_DATA.cog;
+    GPSLastTrack = singletonConfig()->NMEA_DATA.cog;
 
     break;
   case 9: // Date ddmmyy
@@ -892,50 +947,6 @@ bool nmea_GGA_mini_parser(const uint8_t *sentence, uint16_t length)
       decimalCounter += decimalEnabled;
       finalNumber = 10 * finalNumber + (sentence[x] - '0');
     }
-
-    switch (csvCounter)
-    {
-    case 0: // GGA
-      /* code */
-      break;
-    case 1: // UTC Time
-      /* code */
-      break;
-    case 2: // Lat
-      /* code */
-      break;
-    case 3: // N/S
-      /* code */
-      break;
-    case 4: // Long
-      /* code */
-      break;
-    case 5: // E/W
-      /* code */
-      break;
-    case 6: // GPS Status
-      /* code */
-      Operative_GPS = sentence[x] - '0';
-      NMEA_DATA.valid = Operative_GPS > 0 ? true : false;
-      // printf("GGA: %d\n",sentence[x]-'0');
-      break;
-    case 7: // # sats
-      /* code */
-      break;
-
-    case 8: // hdop
-      /* code */
-      break;
-
-    case 9: // alt
-      /* code */
-      break;
-    case 10: // a-units
-      /* code */
-      break;
-    default:
-      break;
-    }
   }
 
   return true;
@@ -1023,7 +1034,7 @@ void uart_fetch_data()
     int64_t now = esp_timer_get_time();
     int64_t isGPSTimeout = (now - GPSLastSpeedKmhReceivedTick);
     int16_t isGPSTimeoutDeciseconds = isGPSTimeout / 100000;
-    snprintf((char *)data, RX_BUF_SIZE, "Parsed: %d %d %.1f %.1f %1.f", isGPSTimeoutDeciseconds, NMEA_DATA.valid, NMEA_DATA.speed, NMEA_DATA.cog, NMEA_DATA.altitude);
+    snprintf((char *)data, RX_BUF_SIZE, "Parsed: %d %d %.1f %.1f %1.f", isGPSTimeoutDeciseconds, singletonConfig()->NMEA_DATA.valid, singletonConfig()->NMEA_DATA.speed, singletonConfig()->NMEA_DATA.cog, singletonConfig()->NMEA_DATA.altitude);
     lv_label_set_text(GPSDiag_NMEADebugSummary, (char *)(data));
   }
 #endif
@@ -1042,13 +1053,17 @@ void nvsRestoreGMeter()
   else
   {
     // Read
+#ifdef RB_ENABLE_CONSOLE_DEBUG
     printf("Reading GMeter from NVS ...\n");
+#endif
     int8_t gmeter_max = 0; // value will default to 0, if not set yet in NVS
     err = nvs_get_i8(my_handle, "gmeter_max", &gmeter_max);
     switch (err)
     {
     case ESP_OK:
+#ifdef RB_ENABLE_CONSOLE_DEBUG
       printf("gmeter_max = %d\n", gmeter_max);
+#endif
       float f = gmeter_max;
       GFactorMax = f / 10.0;
       break;
@@ -1063,7 +1078,9 @@ void nvsRestoreGMeter()
     switch (err)
     {
     case ESP_OK:
+#ifdef RB_ENABLE_CONSOLE_DEBUG
       printf("gmeter_min = %d\n", gmeter_min);
+#endif
       float f = gmeter_min;
       GFactorMin = f / 10.0;
       break;
@@ -1655,7 +1672,7 @@ void Get_BMP280(void)
 void update_Track_lvgl_tick(lv_timer_t *t)
 {
   static int16_t lastCOG = 0;
-  // int32_t COG = -NMEA_DATA.cog * 10;
+  // int32_t COG = -singletonConfig()->NMEA_DATA.cog * 10;
   int16_t COG = AttitudeYaw + AttitudeYawCorrection;
   if (COG < 0)
     COG = COG + 360;
@@ -1675,7 +1692,7 @@ void update_Track_lvgl_tick(lv_timer_t *t)
 void update_Speed_lvgl_tick(lv_timer_t *t)
 {
   static int lastSpeed = -1;
-  int speed = NMEA_DATA.speed * 10;
+  int speed = singletonConfig()->NMEA_DATA.speed * 10;
   if (speed != lastSpeed)
   {
     // printf("NMEA: Speed %d-->%d m/s Angle: %ld\n", lastSpeed, speed, (int32_t)(speed));
@@ -1707,7 +1724,7 @@ void update_Speed_lvgl_tick(lv_timer_t *t)
     lv_img_set_angle(Screen_Speed_SpeedTick, speedAngle + 900);
 
     char buf[15];
-    snprintf(buf, sizeof(buf), "%.0f", NMEA_DATA.speed / isKt); // KT
+    snprintf(buf, sizeof(buf), "%.0f", singletonConfig()->NMEA_DATA.speed / isKt); // KT
     lv_label_set_text(Screen_Speed_SpeedText, buf);
   }
 }
@@ -1853,6 +1870,10 @@ void RB02_CreateScreens()
         VendorSplashScreenImage = backgroundImage;
         loadInternalSplashscreen = false;
       }
+    }
+    else
+    {
+      loadInternalSplashscreen = true;
     }
     if (loadInternalSplashscreen)
     {
@@ -2050,7 +2071,7 @@ void rb_increase_lvgl_tick(lv_timer_t *t)
 #ifdef RB_ENABLE_GPS
     uart_fetch_data();
 #endif
-    RB02_AdvancedAttitude_Tick(&advancedAttitude_Status, &NMEA_DATA, Altimeter, QNH, Variometer);
+    RB02_AdvancedAttitude_Tick(&advancedAttitude_Status, &singletonConfig()->NMEA_DATA, Altimeter, QNH, Variometer);
     {
       uint8_t isAttitudeDoNotNeedGPS = 1;
 #ifdef RB_ENABLE_GPS
@@ -2101,7 +2122,7 @@ void rb_increase_lvgl_tick(lv_timer_t *t)
 #ifdef RB_ENABLE_MAP
   case RB02_TAB_MAP:
     uart_fetch_data();
-    RB02_GPSMap_Tick(&singletonConfig()->gpsMapStatus, &NMEA_DATA, t0);
+    RB02_GPSMap_Tick(&singletonConfig()->gpsMapStatus, &singletonConfig()->NMEA_DATA, t0);
     if (Operative_GPS && OperativeWarningVisible == true)
     {
       lv_obj_add_flag(OperativeWarning, LV_OBJ_FLAG_HIDDEN);
@@ -2128,7 +2149,7 @@ void rb_increase_lvgl_tick(lv_timer_t *t)
     if (Operative_GPS == true)
     {
       // Gyroscope alignment managed by the new algorithm
-      AttitudeYawCorrection = (NMEA_DATA.cog - AttitudeYaw);
+      AttitudeYawCorrection = (singletonConfig()->NMEA_DATA.cog - AttitudeYaw);
     }
     update_Track_lvgl_tick(t);
 #ifdef RB_ENABLE_GPS
@@ -2497,6 +2518,21 @@ void lv_timer_restart_msgbox(void)
 
 static void actionInTab(touchLocation location)
 {
+
+  // 1.1.25 Request to go to the default screen
+  switch (location)
+  {
+  case RB02_TOUCH_NW:
+#ifdef RB_ENABLE_AAT
+    lv_tabview_set_act(tv, RB02_TAB_AAT, LV_ANIM_OFF);
+#else
+    lv_tabview_set_act(tv, RB02_TAB_ATT, LV_ANIM_OFF);
+#endif
+    break;
+  default:
+    break;
+  }
+
   switch (((lv_tabview_t *)tv)->tab_cur)
   {
 
@@ -2690,7 +2726,10 @@ static void speedBgClicked(lv_event_t *event)
 #else
 #endif
 
-  lv_tabview_set_act(tv, cur, LV_ANIM_ON);
+  if (changedTab == true)
+  {
+    lv_tabview_set_act(tv, cur, LV_ANIM_ON);
+  }
   if (DeviceIsDemoMode == 0 && changedTab)
   {
     nvsStoreDefaultScreenOrDemo();
@@ -4969,7 +5008,7 @@ void update_AltimeterDigital_lvgl_tick(lv_timer_t *t)
   lv_label_set_text(Screen_Altitude_Variometer2, buf);
 
 #ifdef RB_ENABLE_GPS
-  snprintf(buf, sizeof(buf), "%.0f", NMEA_DATA.altitude * 3.28084);
+  snprintf(buf, sizeof(buf), "%.0f", singletonConfig()->NMEA_DATA.altitude * 3.28084);
   lv_label_set_text(Screen_Altitude_Pressure, buf);
 #else
   snprintf(buf, sizeof(buf), "%.02f", bmp280Pressure / 100.0);
@@ -5046,7 +5085,7 @@ void update_Clock_lvgl_tick(lv_timer_t *t)
 
   // 1.1.17 Display UTC Clock on the Timer 3 slot
 #ifdef RB_ENABLE_GPS
-  sprintf(buf, "%02u:%02u", NMEA_DATA.tim.hour, NMEA_DATA.tim.minute);
+  sprintf(buf, "%02u:%02u", singletonConfig()->NMEA_DATA.tim.hour, singletonConfig()->NMEA_DATA.tim.minute);
   lv_label_set_text(TimerSE, buf);
 #endif
 }
