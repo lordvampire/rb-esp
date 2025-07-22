@@ -4985,7 +4985,7 @@ void update_AltimeterDigital_lvgl_tick(lv_timer_t *t)
   int32_t AltimeterAbsolute = Altimeter / 100.0;
   if (Altimeter < 0)
   {
-    AltimeterAbsolute = -Altimeter;
+    AltimeterAbsolute = -AltimeterAbsolute;
     // TODO set minus
   }
 
