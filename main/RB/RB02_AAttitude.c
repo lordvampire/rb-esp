@@ -138,9 +138,9 @@ void RB02_AdvancedAttitude_Tick(RB02_AdvancedAttitude_Status *aaStatus, gps_t *g
     if (aaStatus->Altimeter != AltimeterInFeet)
     {
         aaStatus->Altimeter = AltimeterInFeet;
-        if(AltimeterInFeet>100)
+        if(AltimeterInFeet>100 || AltimeterInFeet<-100)
         {
-        snprintf(buf, sizeof(buf), "%02d", AltimeterInFeet%100);
+        snprintf(buf, sizeof(buf), "%02d", abs(AltimeterInFeet%100));
         lv_label_set_text(aaStatus->lv_altimeterF, buf);
         snprintf(buf, sizeof(buf), "%d", AltimeterInFeet/100);
         lv_label_set_text(aaStatus->lv_altimeterM, buf);
@@ -464,7 +464,7 @@ lv_obj_t *RB02_AdvancedAttitude_CreateScreen(RB02_AdvancedAttitude_Status *aaSta
         lv_obj_align(label, LV_ALIGN_CENTER, 170, -10);
         lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
         lv_obj_set_style_text_font(label, &lv_font_montserrat_16, 0);
-        lv_obj_set_style_text_color(label, lv_color_black(), 0);
+        lv_obj_set_style_text_color(label, lv_color_white(), 0);
 
         lv_label_set_text(label, "feet");
         aaStatus->lv_altimeter_unit = label;
@@ -476,7 +476,7 @@ lv_obj_t *RB02_AdvancedAttitude_CreateScreen(RB02_AdvancedAttitude_Status *aaSta
         lv_obj_align(label, LV_ALIGN_CENTER, -170, -10);
         lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
         lv_obj_set_style_text_font(label, &lv_font_montserrat_16, 0);
-        lv_obj_set_style_text_color(label, lv_color_black(), 0);
+        lv_obj_set_style_text_color(label, lv_color_white(), 0);
         if (isKmh == 1)
         {
             lv_label_set_text(label, "KMH");
