@@ -640,6 +640,9 @@ lv_obj_t *RB02_GPSMap_CreateScreen(RB02_GpsMapStatus *gpsMapStatus, lv_obj_t *pa
     return NULL;
 }
 
+
+#define RB_GPS_MAP_PRECISION 500.0
+
 void RB02_GPSMap_Tick(RB02_GpsMapStatus *gpsMapStatus, gps_t *gpsStatus, lv_obj_t *parent)
 {
 
@@ -672,9 +675,8 @@ void RB02_GPSMap_Tick(RB02_GpsMapStatus *gpsMapStatus, gps_t *gpsStatus, lv_obj_
         gpsStatus->longitude = gpsSimulator.longitude;
         gpsStatus->latitude = gpsSimulator.latitude;
     */
-
-    float currLon100 = (gpsStatus->longitude * 250.0);
-    float currLat100 = (gpsStatus->latitude * 250.0);
+    float currLon100 = (gpsStatus->longitude * RB_GPS_MAP_PRECISION);
+    float currLat100 = (gpsStatus->latitude * RB_GPS_MAP_PRECISION);
 
     if (gpsMapStatus->latitude100 == (int32_t)currLat100 && gpsMapStatus->longitude100 == (int32_t)currLon100)
     {
