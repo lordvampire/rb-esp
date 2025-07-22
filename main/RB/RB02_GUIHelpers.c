@@ -28,6 +28,24 @@
 #include "RB02_GUIHelpers.h"
 #include <stdio.h>
 
+
+float nmea_to_decimal(float nmea_coord) {
+    int degrees = (int)(nmea_coord / 100);
+    double minutes = nmea_coord - (degrees * 100);
+    return degrees + (minutes / 60.0);
+}
+
+uint16_t RB02_SuggestedQNH(float GPSAltitudeMeters,int32_t CurrentPressure)
+{
+    if(GPSAltitudeMeters<0.001 && GPSAltitudeMeters > -0.001)
+    {
+        return 1013;
+    }
+    // Altimeter is *100 feet
+    int32_t SuggestedQNH = (((GPSAltitudeMeters * 3.28084 * 100.0)/30.0)+CurrentPressure)/100.0;
+    return SuggestedQNH;
+}
+
 lv_obj_t *RB02_GUIHelpers_CreateBase(lv_obj_t *parent, const lv_img_dsc_t *backgroundImageName)
 {
     lv_obj_t *backgroundImage = lv_img_create(parent);

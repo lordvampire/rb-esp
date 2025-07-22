@@ -55,6 +55,7 @@
  * - https://www.waveshare.com/esp32-s3-touch-lcd-2.8c.htm
  */
 #include "RB02.h"
+#include "RB02_GUIHelpers.h"
 
 // Images pre-loaded
 #ifdef ENABLE_DEMO_SCREENS
@@ -138,6 +139,8 @@ extern float GFactor;
 extern float GFactorMax;
 extern float GFactorMin;
 extern uint8_t GFactorDirty;
+extern int32_t bmp280Pressure;
+extern int32_t Variometer;
 
 /* 1.0.9 For future compatibility imported NMEA ESP32 Example header */
 #define CONFIG_NMEA_PARSER_RING_BUFFER_SIZE 2048
@@ -212,12 +215,12 @@ void uart_fetch_data();
 #endif
 void nvsStorePCal();
 void nvsStoreUARTBaudrate();
-
+static void RB02_AltimeterQNHUpdated();
 static void CreateSingleDigit(lv_obj_t *parent, const lv_img_dsc_t *font, lv_obj_t **segments, int dx, int dy);
 void nvsStoreGMeter();
 void nvsRestoreGMeter();
 void disableTVScroll();
-
+void example1_BMP280_lvgl_tick(lv_timer_t *t);
 // Variables
 
 typedef enum
@@ -567,11 +570,11 @@ void RB02_Example1(void)
   Onboard_create_Clock(t8);
   // 1.1.3 Display unique serial number for device tracking
   esp_efuse_mac_get_default((uint8_t *)(&_chipmacid));
+#ifdef RB_ENABLE_CONSOLE_DEBUG
   int8_t hasGPS = 0;
 #ifdef RB_ENABLE_GPS
   hasGPS = 1;
 #endif
-#ifdef RB_ENABLE_CONSOLE_DEBUG
   printf("$RB,02,%d,%s,%d,%llX\n", RB_02_DISPLAY_SIZE, RB_VERSION, hasGPS, _chipmacid);
 #endif
 #ifdef RB_ENABLE_CHECKLIST
@@ -731,7 +734,35 @@ void nmea_GGA_UpdatedValueFor(uint8_t csvCounter, int32_t finalNumber, uint8_t d
     singletonConfig()->NMEA_DATA.dop_h = conversionValue;
     break;
   case 9: // ALT MT
-    singletonConfig()->NMEA_DATA.altitude = (conversionValue + singletonConfig()->NMEA_DATA.altitude * 2.0) / 3.0;
+    if (finalNumber != 0)
+    {
+      if(singletonConfig()->NMEA_DATA.altitude<0.0001)
+      {
+        singletonConfig()->NMEA_DATA.altitude=conversionValue;
+      }
+      singletonConfig()->NMEA_DATA.altitude = (conversionValue + singletonConfig()->NMEA_DATA.altitude * 5.0) / 6.0;
+      if (singletonConfig()->settingsAutoQNH > 0)
+      {
+        if (Operative_BMP280 > 0 && Operative_GPS > 0)
+        {
+          if (Variometer < 100 && Variometer > -100)
+          {
+            uint16_t SuggestedQNH = RB02_SuggestedQNH(singletonConfig()->NMEA_DATA.altitude, bmp280Pressure);
+#ifdef RB_ENABLE_CONSOLE_DEBUG
+            printf("Suggested QNH %d vs %d\n", SuggestedQNH, QNH);
+#endif
+            if (SuggestedQNH - QNH < 10 && SuggestedQNH - QNH > -10)
+            {
+              if (abs(SuggestedQNH - QNH) > 0)
+              {
+                QNH = RB02_SuggestedQNH(singletonConfig()->NMEA_DATA.altitude, bmp280Pressure);
+                RB02_AltimeterQNHUpdated();
+              }
+            }
+          }
+        }
+      }
+    }
     break;
   case 10: // a-units
     /* code */
@@ -773,7 +804,8 @@ void nmea_RMC_UpdatedValueFor(uint8_t csvCounter, int32_t finalNumber, uint8_t d
     /* code */
     if (finalNumber != 0)
     {
-      singletonConfig()->NMEA_DATA.latitude = conversionValue / 100.0;
+
+      singletonConfig()->NMEA_DATA.latitude = nmea_to_decimal(conversionValue);
     }
     break;
   case 4: // N
@@ -783,7 +815,7 @@ void nmea_RMC_UpdatedValueFor(uint8_t csvCounter, int32_t finalNumber, uint8_t d
     /* code */
     if (finalNumber != 0)
     {
-      singletonConfig()->NMEA_DATA.longitude = conversionValue / 100.0;
+      singletonConfig()->NMEA_DATA.longitude = nmea_to_decimal(conversionValue);
     }
     break;
   case 6: // E
@@ -1116,6 +1148,8 @@ void nvsRestoreGMeter()
 
     singletonConfig()->bmp280override = pcal;
 
+    nvs_get_u8(my_handle, "autoQNH", &(singletonConfig()->settingsAutoQNH));
+
     uint8_t defaultPageOrDemo = 0xff; // value will default to 0, if not set yet in NVS
                                       // 1.1.23 Default is Advanced Attitude Indicator
 #ifdef RB_02_DISPLAY_TOUCH
@@ -1212,13 +1246,12 @@ void nvsRestoreGMeter()
     printf("Gyro Calibration %.1f %.1f %.1f\n", GyroCalibration.x, GyroCalibration.z, GyroCalibration.z);
 #endif
 
-
     // 1.1.25B
-    int32_t i32buffer=0;
+    int32_t i32buffer = 0;
     nvs_get_i32(my_handle, "latitude100", &i32buffer);
-    singletonConfig()->NMEA_DATA.latitude = i32buffer/100.0;
+    singletonConfig()->NMEA_DATA.latitude = i32buffer / 100.0;
     nvs_get_i32(my_handle, "longitude100", &i32buffer);
-    singletonConfig()->NMEA_DATA.longitude= i32buffer/100.0;
+    singletonConfig()->NMEA_DATA.longitude = i32buffer / 100.0;
     nvs_close(my_handle);
   }
 }
@@ -1358,6 +1391,8 @@ void nvsStorePCal()
     printf("Writing pcal from NVS ...\n");
     err = nvs_set_i32(my_handle, "pcal", singletonConfig()->bmp280override);
     printf((err != ESP_OK) ? "Failed to update bmp280override!\n" : "Done\n");
+    // 1.1.26
+    nvs_set_u8(my_handle, "autoQNH", singletonConfig()->settingsAutoQNH);
     nvs_close(my_handle);
   }
 }
@@ -2475,6 +2510,12 @@ static void mbox1_cage_event_cb(lv_event_t *e)
     const char *txt = lv_msgbox_get_active_btn_text(msgbox);
     if (txt)
     {
+      if (strcmp("QNH", txt) == 0)
+      {
+        QNH = RB02_SuggestedQNH(singletonConfig()->NMEA_DATA.altitude, bmp280Pressure);
+        RB02_AltimeterQNHUpdated();
+        singletonConfig()->settingsAutoQNH = 1;
+      }
       if (strcmp("CAGE", txt) == 0)
       {
         // TODO: make an avg
@@ -2498,9 +2539,13 @@ void lv_att_reset_msgbox(void)
 {
   if (mbox1 != NULL)
     return;
-  static const char *btns[] = {"CAGE", "CANCEL", ""};
+  static const char *btns[] = {"QNH", "CAGE", "CANCEL", ""};
 
-  mbox1 = lv_msgbox_create(NULL, "Attitude", "Would you like to cage sensors?", btns, true);
+  char buf[100];
+  uint16_t SuggestedQNH = RB02_SuggestedQNH(singletonConfig()->NMEA_DATA.altitude, bmp280Pressure);
+  snprintf(buf, sizeof(buf), "Would you like to cage sensors?\nAuto QNH=%d", SuggestedQNH);
+
+  mbox1 = lv_msgbox_create(NULL, "Attitude", buf, btns, true);
   lv_obj_set_style_text_font(mbox1, &lv_font_montserrat_16, 0);
   lv_obj_add_event_cb(mbox1, mbox1_cage_event_cb, LV_EVENT_ALL, mbox1);
   lv_obj_center(mbox1);
@@ -2529,6 +2574,21 @@ void lv_timer_restart_msgbox(void)
   lv_obj_set_style_text_font(mbox1, &lv_font_montserrat_16, 0);
   lv_obj_add_event_cb(mbox1, mbox1_timer_reset, LV_EVENT_ALL, mbox1);
   lv_obj_center(mbox1);
+}
+
+static void RB02_AltimeterQNHUpdated()
+{
+  char buf[25];
+  snprintf(buf, sizeof(buf), "%03u", QNH);
+  lv_label_set_text(Screen_Altitude_QNH, buf);
+  // 1.1.2 added mmHg conversion
+  snprintf(buf, sizeof(buf), "QNH: %u %.02f", QNH, ((float)QNH) / 33.8639);
+  lv_label_set_text(Screen_Altitude_QNH2, buf);
+  snprintf(buf, sizeof(buf), "%+ld", Variometer);
+  lv_label_set_text(Screen_Altitude_Variometer2, buf);
+  example1_BMP280_lvgl_tick(NULL);
+  // [ISSUE] with variometer on digital altimeter page #2
+  Variometer = 0;
 }
 
 static void actionInTab(touchLocation location)
@@ -2591,9 +2651,11 @@ static void actionInTab(touchLocation location)
     {
     case RB02_TOUCH_N:
       QNH++;
+      singletonConfig()->settingsAutoQNH = 0;
       break;
     case RB02_TOUCH_S:
       QNH--;
+      singletonConfig()->settingsAutoQNH = 0;
       break;
     case RB02_TOUCH_CENTER:
       lv_att_reset_msgbox();
@@ -2602,17 +2664,7 @@ static void actionInTab(touchLocation location)
       break;
     }
 
-    char buf[25];
-    snprintf(buf, sizeof(buf), "%03u", QNH);
-    lv_label_set_text(Screen_Altitude_QNH, buf);
-    // 1.1.2 added mmHg conversion
-    snprintf(buf, sizeof(buf), "QNH: %u %.02f", QNH, ((float)QNH) / 33.8639);
-    lv_label_set_text(Screen_Altitude_QNH2, buf);
-    snprintf(buf, sizeof(buf), "%+ld", Variometer);
-    lv_label_set_text(Screen_Altitude_Variometer2, buf);
-    example1_BMP280_lvgl_tick(NULL);
-    // [ISSUE] with variometer on digital altimeter page #2
-    Variometer = 0;
+    RB02_AltimeterQNHUpdated();
     break;
   case RB02_TAB_CLK:
     switch (location)
@@ -2782,6 +2834,19 @@ static void ChangeAttitudeBalanceAlphaChanged(lv_event_t *e)
   nvsStoreFilters();
 }
 
+static void AutoQNHModeChanged(lv_event_t *e)
+{
+  lv_obj_t *sw = (lv_obj_t *)lv_event_get_user_data(e);
+  if (lv_obj_get_state(sw) & LV_STATE_CHECKED)
+  {
+    singletonConfig()->settingsAutoQNH = 1;
+  }
+  else
+  {
+    singletonConfig()->settingsAutoQNH = 0;
+  }
+  nvsStorePCal();
+}
 static void DeviceIsDemoModeChanged(lv_event_t *e)
 {
   lv_obj_t *sw = (lv_obj_t *)lv_event_get_user_data(e);
@@ -2870,6 +2935,8 @@ static void SpeedDegreeStartChanged(lv_event_t *e)
            speedYellow,
            speedRed);
   lv_label_set_text(t_speedSummary, buf);
+
+  nvsStoreSpeedArc();
 }
 static void DisableFilteringChanged(lv_event_t *e)
 {
@@ -3084,7 +3151,6 @@ static void Onboard_create_Setup(lv_obj_t *parent)
 
     SettingsEngineTimeLabel = VersionLabel;
   }
-
 
   // 1.1.6
   if (true)
@@ -3311,6 +3377,26 @@ static void Onboard_create_Setup(lv_obj_t *parent)
     lv_obj_add_style(bmp280overrideLabel, &style_title, LV_STATE_DEFAULT);
 
     lineY += 70;
+  }
+
+  if (true)
+  {
+    lv_obj_t *DisableFilteringLabel = lv_label_create(parent);
+    lv_obj_set_size(DisableFilteringLabel, 150, 16);
+    lv_obj_align(DisableFilteringLabel, LV_ALIGN_CENTER, -75, lineY);
+    lv_obj_set_style_text_align(DisableFilteringLabel, LV_TEXT_ALIGN_RIGHT, 0);
+    lv_obj_set_style_text_font(DisableFilteringLabel, &lv_font_montserrat_16, 0);
+    lv_label_set_text(DisableFilteringLabel, "Auto QNH");
+    lv_obj_add_style(DisableFilteringLabel, &style_title, LV_STATE_DEFAULT);
+    lv_obj_t *sw = lv_switch_create(parent);
+    if (singletonConfig()->settingsAutoQNH != 0)
+    {
+      lv_obj_add_state(sw, LV_STATE_CHECKED);
+    }
+    lv_obj_set_size(sw, 65, 40);
+    lv_obj_align(sw, LV_ALIGN_CENTER, 40, lineY);
+    lv_obj_add_event_cb(sw, AutoQNHModeChanged, LV_EVENT_VALUE_CHANGED, sw);
+    lineY += 40;
   }
 
   if (true)
@@ -3563,7 +3649,7 @@ static void Onboard_create_Setup(lv_obj_t *parent)
     lv_obj_align(kmhDropDown, LV_ALIGN_CENTER, 0, lineY);
     lv_obj_add_event_cb(kmhDropDown, event_handler_kmh_menu, LV_EVENT_ALL, NULL);
     lv_dropdown_set_selected(kmhDropDown, isKmh);
-    lineY += 30;
+    lineY += 32;
   }
 
   if (true)
@@ -3586,7 +3672,7 @@ static void Onboard_create_Setup(lv_obj_t *parent)
              speedRed);
     lv_label_set_text(t_speedSummary, buf);
 
-    lineY += 25;
+    lineY += 32;
   }
 
   if (true)
@@ -3754,7 +3840,7 @@ static void Onboard_create_Setup(lv_obj_t *parent)
     lv_obj_align(progressObject, LV_ALIGN_CENTER, 0, lineY + 30);
 
     lv_obj_t *progressObjectLabel = lv_label_create(parent);
-    lv_obj_set_size(progressObjectLabel, 0, 360);
+    lv_obj_set_size(progressObjectLabel, 300, 20);
     lv_obj_align(progressObjectLabel, LV_ALIGN_CENTER, 0, lineY);
     lv_obj_set_style_text_align(progressObjectLabel, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_set_style_text_font(progressObjectLabel, &lv_font_montserrat_16, 0);
@@ -3837,7 +3923,6 @@ static void Onboard_create_Setup(lv_obj_t *parent)
     lv_obj_add_style(VersionLabel, &style_title, LV_STATE_DEFAULT);
     lineY += 20;
   }
-
 
   lv_obj_add_event_cb(parent, speedBgClicked, LV_EVENT_CLICKED, NULL);
 }
@@ -4296,15 +4381,25 @@ static void Onboard_create_TurnSlip(lv_obj_t *parent)
 
   lv_obj_align(Screen_TurnSlip_Obj_Turn, LV_ALIGN_CENTER, 0, 0);
   Screen_TurnSlip_Obj_Ball = _screenBall;
-
+  // 1.1.1 Branding RB-02 on every screen
   if (true)
   {
     lv_obj_t *label = lv_label_create(parent);
-    lv_obj_set_size(label, 150, 40);
+    lv_obj_set_size(label, 96, 40);
+    lv_obj_align(label, LV_ALIGN_CENTER, 0, -210);
+    lv_obj_set_style_text_font(label, &lv_font_montserrat_16, 0);
+    lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
+    lv_label_set_text(label, "RB 02");
+    lv_obj_add_style(label, &style_title, LV_STATE_DEFAULT);
+  }
+  if (true)
+  {
+    lv_obj_t *label = lv_label_create(parent);
+    lv_obj_set_size(label, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
     lv_obj_align(label, LV_ALIGN_CENTER, 0, -100);
     lv_obj_set_style_text_font(label, &lv_font_montserrat_16, 0);
     lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
-    lv_label_set_text(label, "GYRO ASSISTED");
+    lv_label_set_text(label, "GYRO ASSISTED\nNOT CERTIFIED");
     lv_obj_add_style(label, &style_title, LV_STATE_DEFAULT);
   }
 
@@ -4321,16 +4416,6 @@ static void Onboard_create_TurnSlip(lv_obj_t *parent)
   }
 
   // 1.1.13 Warning labels
-  if (true)
-  {
-    lv_obj_t *label = lv_label_create(parent);
-    lv_obj_set_size(label, 96, 40);
-    lv_obj_align(label, LV_ALIGN_CENTER, 0, 215);
-    lv_obj_set_style_text_font(label, &lv_font_montserrat_16, 0);
-    lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
-    lv_label_set_text(label, "NOT CERTIFIED");
-    lv_obj_add_style(label, &style_title, LV_STATE_DEFAULT);
-  }
 }
 #ifdef RB_ENABLE_GPS
 static void Onboard_create_Track(lv_obj_t *parent)
