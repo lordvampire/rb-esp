@@ -34,10 +34,28 @@
 
 #ifdef RB_02_ENABLE_INTERNALMAP
 #include "images/GPSMapInternal.c"
+#else
+#define RB_GPS_MAP_MAX_ZOOM 4
 #endif
 
+//#define RB_ENABLE_CONSOLE_DEBUG 1
 // #define RB_MAP_MULTI_TILE 1
 extern lv_style_t style_title;
+
+void RB02_GPSMap_ShowLoading(RB02_GpsMapStatus *gpsMapStatus, bool show)
+{
+#ifdef RB_ENABLE_CONSOLE_DEBUG
+    printf("RB02_GPSMap_ShowLoading %d\n", show);
+#endif
+    if(show)
+    {
+        lv_obj_clear_flag(gpsMapStatus->labelLoading, LV_OBJ_FLAG_HIDDEN);
+    }
+    else
+    {
+        lv_obj_add_flag(gpsMapStatus->labelLoading, LV_OBJ_FLAG_HIDDEN);
+    }
+}
 
 uint8_t zoomSlicerMapper(int8_t zoomLevel)
 {
@@ -50,6 +68,9 @@ uint8_t zoomSlicerMapper(int8_t zoomLevel)
     case 2:
         r = 20;
         break;
+    case 3:
+        r = 10;
+        break;
     default:
         break;
     }
@@ -58,6 +79,7 @@ uint8_t zoomSlicerMapper(int8_t zoomLevel)
 
 uint8_t zoomSlicerMapperMBTiles(int8_t zoomLevel)
 {
+    // TODO: Check if the array is aligned to RB_GPS_MAP_MAX_ZOOM
     uint8_t mbTilesMappping[4] = {8, 9, 10, 11};
     if (zoomLevel < 0)
         zoomLevel = 0;
@@ -163,6 +185,7 @@ void RB02_GPSMap_SquareGenerator(RB02_GpsMapStatus *gpsMapStatus, float centerLa
             if (gpsMapStatus->mapDirty == 0)
             {
                 gpsMapStatus->mapDirty = 0xff;
+                RB02_GPSMap_ShowLoading(gpsMapStatus, true);
             }
         }
 
@@ -187,9 +210,10 @@ void RB02_GPSMap_SquareGenerator(RB02_GpsMapStatus *gpsMapStatus, float centerLa
 
         if (tileCoordinates.x != gpsMapStatus->lastTile.x || tileCoordinates.y_tms != gpsMapStatus->lastTile.y_tms)
         {
-           if (gpsMapStatus->mapDirty == 0)
+            if (gpsMapStatus->mapDirty == 0)
             {
                 gpsMapStatus->mapDirty = 0xff;
+                RB02_GPSMap_ShowLoading(gpsMapStatus, true);
             }
         }
     }
@@ -203,23 +227,34 @@ void RB02_GPSMap_SquareGenerator(RB02_GpsMapStatus *gpsMapStatus, float centerLa
 void RB02_GPSMap_Touch_N(RB02_GpsMapStatus *gpsMapStatus)
 {
 #ifdef RB_02_ENABLE_EXTERNALMAP
-    gpsMapStatus->zoomLevel++;
-    gpsMapStatus->mapLatitudeBegin = 0;
-    gpsMapStatus->latitude100 = 0;
+    if (gpsMapStatus->mapDirty == 0)
+    {
+        if (gpsMapStatus->zoomLevel < RB_GPS_MAP_MAX_ZOOM)
+        {
+            gpsMapStatus->zoomLevel++;
+        }
+        gpsMapStatus->mapLatitudeBegin = 0;
+        gpsMapStatus->latitude100 = 0;
+        RB02_GPSMap_ShowLoading(gpsMapStatus, true);
+    }
 #endif
 }
 void RB02_GPSMap_Touch_S(RB02_GpsMapStatus *gpsMapStatus)
 {
 #ifdef RB_02_ENABLE_EXTERNALMAP
-    if (gpsMapStatus->zoomLevel > 0)
+    if (gpsMapStatus->mapDirty == 0)
     {
-        gpsMapStatus->zoomLevel--;
+        if (gpsMapStatus->zoomLevel > 0)
+        {
+            gpsMapStatus->zoomLevel--;
+        }
+        else
+        {
+        }
+        gpsMapStatus->mapLatitudeBegin = 0;
+        gpsMapStatus->latitude100 = 0;
+        RB02_GPSMap_ShowLoading(gpsMapStatus, true);
     }
-    else
-    {
-    }
-    gpsMapStatus->mapLatitudeBegin = 0;
-    gpsMapStatus->latitude100 = 0;
 #endif
 }
 
@@ -325,6 +360,11 @@ void RB02_GPSMap_ReloadMBTilesLoadTile(RB02_GpsMapStatus *gpsMapStatus, uint8_t 
     {
         backgroundImage = lv_img_create(parent);
         gpsMapStatus->tiles[index] = backgroundImage;
+
+        lv_obj_move_foreground(gpsMapStatus->labelLoading);
+        lv_obj_move_foreground(gpsMapStatus->poiMy);
+        lv_obj_move_foreground(gpsMapStatus->labelLatitude);
+        lv_obj_move_foreground(gpsMapStatus->labelLongitude);
     }
     else
     {
@@ -370,6 +410,7 @@ void RB02_GPSMap_ReloadMBTiles(RB02_GpsMapStatus *gpsMapStatus, gps_t *gpsStatus
         }
         lv_label_set_text(gpsMapStatus->labelTilePath, filename);
         gpsMapStatus->mapDirty = gpsMapStatus->mapDirty & ~RB_GPS_MAP_TILE_C;
+        gpsMapStatus->lastTile = tileCoordinates;
         return;
     }
 
@@ -475,15 +516,6 @@ void RB02_GPSMap_ReloadMBTiles(RB02_GpsMapStatus *gpsMapStatus, gps_t *gpsStatus
         gpsMapStatus->mapDirty = gpsMapStatus->mapDirty & ~RB_GPS_MAP_TILE_SE;
     }
 
-    if (gpsMapStatus->mapDirty == 0)
-    {
-        lv_obj_move_foreground(gpsMapStatus->poiMy);
-        lv_obj_move_foreground(gpsMapStatus->labelLatitude);
-        lv_obj_move_foreground(gpsMapStatus->labelLongitude);
-
-        gpsMapStatus->lastTile = tileCoordinates;
-    }
-
 #endif
 }
 
@@ -529,6 +561,16 @@ lv_obj_t *RB02_GPSMap_CreateScreen(RB02_GpsMapStatus *gpsMapStatus, lv_obj_t *pa
         lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
         lv_label_set_text(label, "-------");
         gpsMapStatus->labelTilePath = label;
+    }
+    if (true)
+    {
+        lv_obj_t *label = lv_label_create(parent);
+        lv_obj_set_size(label, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+        lv_obj_align(label, LV_ALIGN_CENTER, 0, -168);
+        lv_obj_set_style_text_font(label, &lv_font_montserrat_32, 0);
+        lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
+        lv_label_set_text(label, "LOADING");
+        gpsMapStatus->labelLoading = label;
     }
 
 #ifdef RB_02_ENABLE_INTERNALMAP
@@ -601,6 +643,10 @@ lv_obj_t *RB02_GPSMap_CreateScreen(RB02_GpsMapStatus *gpsMapStatus, lv_obj_t *pa
 void RB02_GPSMap_Tick(RB02_GpsMapStatus *gpsMapStatus, gps_t *gpsStatus, lv_obj_t *parent)
 {
 
+#ifdef RB_ENABLE_CONSOLE_DEBUG
+    printf("RB02_GPSMap_Tick\n");
+#endif
+
     // Some example GPS Coordinates
     // Arezzo
     // gpsStatus->latitude = 43.45513012173618;
@@ -608,20 +654,24 @@ void RB02_GPSMap_Tick(RB02_GpsMapStatus *gpsMapStatus, gps_t *gpsStatus, lv_obj_
     // gpsStatus->latitude= 43.11126;
     // gpsStatus->longitude = 12.08190;
 
-/*
-    static gps_t gpsSimulator;
-    if(gpsSimulator.latitude<0.001 && gpsSimulator.latitude>-0.001)
-    {
-            gpsSimulator.latitude = ;
-            gpsSimulator.longitude = ;
-    }
-    gpsSimulator.latitude = gpsSimulator.latitude + 0.001;
-    gpsSimulator.longitude = gpsSimulator.longitude + 0.001;
+    // Sassuolo
+    //gpsStatus->latitude =44.56994865496443;
+    //gpsStatus->longitude = 10.779384070431439;
+
+    /*
+        static gps_t gpsSimulator;
+        if(gpsSimulator.latitude<0.001 && gpsSimulator.latitude>-0.001)
+        {
+                gpsSimulator.latitude = ;
+                gpsSimulator.longitude = ;
+        }
+        gpsSimulator.latitude = gpsSimulator.latitude + 0.001;
+        gpsSimulator.longitude = gpsSimulator.longitude + 0.001;
 
 
-    gpsStatus->longitude = gpsSimulator.longitude;
-    gpsStatus->latitude = gpsSimulator.latitude;
-*/
+        gpsStatus->longitude = gpsSimulator.longitude;
+        gpsStatus->latitude = gpsSimulator.latitude;
+    */
 
     float currLon100 = (gpsStatus->longitude * 250.0);
     float currLat100 = (gpsStatus->latitude * 250.0);
@@ -679,10 +729,11 @@ void RB02_GPSMap_Tick(RB02_GpsMapStatus *gpsMapStatus, gps_t *gpsStatus, lv_obj_
     {
         gpsMapStatus->latitude100 = currLat100;
         gpsMapStatus->longitude100 = currLon100;
+        RB02_GPSMap_ShowLoading(gpsMapStatus, false);
     }
 
-    float diffLatitude = currLat100/2.5 - gpsMapStatus->mapLatitudeEnd;
-    float diffLongitude = currLon100/2.5 - gpsMapStatus->mapLongitudeBegin;
+    float diffLatitude = (gpsStatus->latitude * 100.0) - gpsMapStatus->mapLatitudeEnd;
+    float diffLongitude = (gpsStatus->longitude * 100.0) - gpsMapStatus->mapLongitudeBegin;
 
     float percentageX = diffLongitude / longitudeEscursion;
     float percentageY = diffLatitude / latitudeEscursion;
