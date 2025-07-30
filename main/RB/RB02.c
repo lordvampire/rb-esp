@@ -73,6 +73,11 @@
 #include "RB02_GPSMap.h"
 #endif
 
+// 1.1.27
+#ifdef RB_ENABLE_GPS
+#include "RB02_Gyro.h"
+#endif
+
 #ifdef RB_ENABLE_GPS
 #ifdef RB_ENABLE_GPS_DIAG
 #include "RB02_GPSDiag.h"
@@ -85,6 +90,11 @@
 #ifdef RB_ENABLE_AAT
 #include "RB02_AAttitude.h"
 #endif
+
+#ifdef RB_ENABLE_TRAFFIC
+#include "RB02_Traffic.h"
+#endif
+
 // 1.1.5 Added Vendor Splashscreen
 #include "Vendor.h"
 
@@ -193,7 +203,7 @@ static void Onboard_create_Attitude(lv_obj_t *parent);
 static void Onboard_create_AltimeterDigital(lv_obj_t *parent);
 static void Onboard_create_TurnSlip(lv_obj_t *parent);
 static void Onboard_create_Clock(lv_obj_t *parent);
-static void Onboard_create_Track(lv_obj_t *parent);
+
 static void Onboard_create_Variometer(lv_obj_t *parent);
 static void Onboard_create_GMeter(lv_obj_t *parent);
 static void Onboard_create_Setup(lv_obj_t *parent);
@@ -245,7 +255,6 @@ typedef enum
 #ifdef ENABLE_DEMO_SCREENS
   RB02_TAB_SYS,
   RB02_TAB_SYN,
-  RB02_TAB_RDR,
 // RB02_TAB_HSI,
 #endif
 #ifdef RB_ENABLE_GPS
@@ -269,6 +278,9 @@ typedef enum
   RB02_TAB_CLK,
 #ifdef RB_ENABLE_CHECKLIST
   RB02_TAB_CHK,
+#endif
+#ifdef RB_ENABLE_TRAFFIC
+  RB02_TAB_RDR,
 #endif
   RB02_TAB_SET,
 #ifdef VIBRATION_TEST
@@ -314,7 +326,7 @@ lv_obj_t *Screen_Attitude_Pitch = NULL;
 lv_obj_t *Screen_Attitude_RollIndicator = NULL;
 void *Screen_Attitude_Rounds[4];
 uint16_t QNH = 1013;
-lv_obj_t *Screen_Gyro_Gear = NULL;
+// lv_obj_t *Screen_Gyro_Gear = NULL;
 extern lv_obj_t *Screen_Altitude_Miles;
 extern lv_obj_t *Screen_Altitude_Cents;
 lv_obj_t *Screen_Variometer_Cents = NULL;
@@ -349,8 +361,6 @@ lv_obj_t *Screen_TurnSlip_Obj_Label = NULL;
 lv_obj_t *Screen_TurnSlip_Obj_Turn = NULL;
 lv_obj_t *Screen_Speed_SpeedText = NULL;
 lv_obj_t *Screen_Speed_SpeedTick = NULL;
-lv_obj_t *Screen_Track_TrackText = NULL;
-lv_obj_t *Screen_Track_TrackSource = NULL;
 
 lv_obj_t *Screen_GMeter_Ball = NULL;
 lv_obj_t *Screen_GMeter_BallMax = NULL;
@@ -504,7 +514,7 @@ void RB02_Example1(void)
   lv_obj_t *t3b = lv_tabview_add_tab(tv, "Altimeter");
   lv_obj_t *t4 = lv_tabview_add_tab(tv, "TurnSlip");
   // Track backup as Gyroscope Directional
-  lv_obj_t *t5 = lv_tabview_add_tab(tv, "Track");
+  singletonConfig()->ui.Gyro.parent = lv_tabview_add_tab(tv, "Track");
 #ifdef RB_ENABLE_MAP
   t0 = lv_tabview_add_tab(tv, "Map"); // 1.1.19 Last version with demo screens
 #endif
@@ -521,6 +531,10 @@ void RB02_Example1(void)
   // 1.1.19
 #ifdef RB_ENABLE_CHECKLIST
   lv_obj_t *tChecklist = lv_tabview_add_tab(tv, "Checklist");
+#endif
+
+#ifdef RB_ENABLE_TRAFFIC
+  singletonConfig()->trafficStatus.lv_parent = lv_tabview_add_tab(tv, "Radar");
 #endif
   lv_obj_t *t9 = lv_tabview_add_tab(tv, "Setup");
 #ifdef VIBRATION_TEST
@@ -558,7 +572,6 @@ void RB02_Example1(void)
   Onboard_create_AltimeterDigital(t3b);
   Onboard_create_TurnSlip(t4);
 #ifdef RB_ENABLE_GPS
-  Onboard_create_Track(t5);
 #ifdef RB_ENABLE_MAP
   RB02_GPSMap_CreateScreen(&singletonConfig()->gpsMapStatus, t0);
   lv_obj_add_event_cb(t0, speedBgClicked, LV_EVENT_CLICKED, NULL);
@@ -736,9 +749,9 @@ void nmea_GGA_UpdatedValueFor(uint8_t csvCounter, int32_t finalNumber, uint8_t d
   case 9: // ALT MT
     if (finalNumber != 0)
     {
-      if(singletonConfig()->NMEA_DATA.altitude<0.0001)
+      if (singletonConfig()->NMEA_DATA.altitude < 0.0001)
       {
-        singletonConfig()->NMEA_DATA.altitude=conversionValue;
+        singletonConfig()->NMEA_DATA.altitude = conversionValue;
       }
       singletonConfig()->NMEA_DATA.altitude = (conversionValue + singletonConfig()->NMEA_DATA.altitude * 5.0) / 6.0;
       if (singletonConfig()->settingsAutoQNH > 0)
@@ -1719,6 +1732,19 @@ void Get_BMP280(void)
 {
   example1_BMP280_lvgl_tick(NULL);
 }
+
+void RB02_Gyro_MoveNumber(lv_obj_t *item, int16_t degree, uint8_t distance)
+{
+  int16_t sin = lv_trigo_sin(degree - 90) / 327;
+  int16_t cos = lv_trigo_cos(degree - 90) / 327;
+
+  int16_t x = (cos * distance) / 100;
+  int16_t y = (sin * distance) / 100;
+
+  lv_obj_align(item, LV_ALIGN_CENTER, x, y);
+  lv_img_set_angle(item, degree * 10.0);
+}
+
 void update_Track_lvgl_tick(lv_timer_t *t)
 {
   static int16_t lastCOG = 0;
@@ -1729,13 +1755,17 @@ void update_Track_lvgl_tick(lv_timer_t *t)
   COG = COG % 360;
   if (COG != lastCOG)
   {
-    printf("NMEA: Track %d-->%d\n", lastCOG, COG);
+    //printf("NMEA: Track %d-->%d\n", lastCOG, COG);
     lastCOG = COG;
-    lv_img_set_angle(Screen_Gyro_Gear, COG * 10);
+    // lv_img_set_angle(Screen_Gyro_Gear, COG * 10);
+    for (uint8_t n = 0; n < 12; n++)
+    {
+      RB02_Gyro_MoveNumber(singletonConfig()->ui.Gyro.Numbers[n], -COG + (360 / 12) * n, 180);
+    }
 
     char buf[15];
     snprintf(buf, sizeof(buf), "%d°", COG);
-    lv_label_set_text(Screen_Track_TrackText, buf);
+    lv_label_set_text(singletonConfig()->ui.Gyro.Screen_Track_TrackText, buf);
   }
 }
 
@@ -1936,6 +1966,16 @@ void RB02_CreateScreens()
   RB02_AdvancedAttitude_CreateScreen(&advancedAttitude_Status, &att_aircraft, &att_tri);
   lv_obj_add_event_cb(advancedAttitude_Status.lv_parent, speedBgClicked, LV_EVENT_CLICKED, NULL);
 #endif
+
+#ifdef RB_ENABLE_TRAFFIC
+  RB02_Traffic_CreateScreen(&(singletonConfig()->trafficStatus));
+  lv_obj_add_event_cb(singletonConfig()->trafficStatus.lv_parent, speedBgClicked, LV_EVENT_CLICKED, NULL);
+#endif
+
+
+
+  RB02_Gyro_CreateScreen(singletonConfig()->ui.Gyro.parent);
+  lv_obj_add_event_cb(singletonConfig()->ui.Gyro.parent, speedBgClicked, LV_EVENT_CLICKED, NULL);
 }
 
 void rb_increase_lvgl_tick(lv_timer_t *t)
@@ -2148,6 +2188,12 @@ void rb_increase_lvgl_tick(lv_timer_t *t)
     break;
 #endif
 
+#ifdef RB_ENABLE_TRAFFIC
+  case RB02_TAB_RDR:
+    RB02_Traffic_Tick(&(singletonConfig()->trafficStatus));
+    break;
+#endif
+
 #ifdef RB_ENABLE_GPS
   case RB02_TAB_SPD:
     uart_fetch_data();
@@ -2207,7 +2253,7 @@ void rb_increase_lvgl_tick(lv_timer_t *t)
     {
       lv_obj_add_flag(OperativeWarning, LV_OBJ_FLAG_HIDDEN);
       OperativeWarningVisible = false;
-      lv_label_set_text(Screen_Track_TrackSource, "GPS TRACK");
+      lv_label_set_text(singletonConfig()->ui.Gyro.Screen_Track_TrackSource, "GPS TRACK");
     }
     else
     {
@@ -2215,7 +2261,7 @@ void rb_increase_lvgl_tick(lv_timer_t *t)
       {
         lv_obj_clear_flag(OperativeWarning, LV_OBJ_FLAG_HIDDEN);
         OperativeWarningVisible = true;
-        lv_label_set_text(Screen_Track_TrackSource, "GYRO");
+        lv_label_set_text(singletonConfig()->ui.Gyro.Screen_Track_TrackSource, "GYRO");
       }
       else
       {
@@ -2627,6 +2673,21 @@ static void actionInTab(touchLocation location)
       break;
     }
     break;
+#ifdef RB_ENABLE_TRAFFIC
+  case RB02_TAB_RDR:
+    switch (location)
+    {
+    case RB02_TOUCH_N:
+      RB02_Traffic_Touch_N(&singletonConfig()->trafficStatus);
+      break;
+    case RB02_TOUCH_S:
+      RB02_Traffic_Touch_S(&singletonConfig()->trafficStatus);
+      break;
+    default:
+      break;
+    }
+    break;
+#endif
 #ifdef RB_ENABLE_MAP
   case RB02_TAB_MAP:
     switch (location)
@@ -4417,55 +4478,7 @@ static void Onboard_create_TurnSlip(lv_obj_t *parent)
 
   // 1.1.13 Warning labels
 }
-#ifdef RB_ENABLE_GPS
-static void Onboard_create_Track(lv_obj_t *parent)
-{
-  Screen_Gyro_Gear = Onboard_create_Base(parent, &RoundGyro);
-  Onboard_create_Base(parent, &RoundGyroHeading);
 
-  // 1.1.1 Branding RB-02 on every screen
-  if (true)
-  {
-    lv_obj_t *label = lv_label_create(parent);
-    lv_obj_set_size(label, 96, 40);
-    lv_obj_align(label, LV_ALIGN_CENTER, 0, -200);
-    lv_obj_set_style_text_font(label, &lv_font_montserrat_16, 0);
-    lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
-    lv_label_set_text(label, "RB 02");
-    lv_obj_add_style(label, &style_title, LV_STATE_DEFAULT);
-  }
-
-  if (true)
-  {
-    lv_obj_t *label = lv_label_create(parent);
-    lv_obj_set_size(label, 300, 40);
-    lv_obj_align(label, LV_ALIGN_CENTER, 0, -26);
-    lv_obj_set_style_text_font(label, &lv_font_montserrat_16, 0);
-    lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
-#ifdef RB_ENABLE_GPS
-    lv_label_set_text(label, "GPS TRACK");
-#else
-    lv_label_set_text(label, "GYRO");
-#endif
-    lv_obj_add_style(label, &style_title, LV_STATE_DEFAULT);
-
-    Screen_Track_TrackSource = label;
-  }
-
-  Screen_Track_TrackText = lv_label_create(parent);
-  lv_obj_set_size(Screen_Track_TrackText, 128, 48);
-  lv_obj_align(Screen_Track_TrackText, LV_ALIGN_CENTER, 8, -8); // Displacement to center the "°"
-  lv_obj_set_style_text_align(Screen_Track_TrackText, LV_TEXT_ALIGN_CENTER, 0);
-  lv_obj_set_style_text_font(Screen_Track_TrackText, &lv_font_montserrat_48, 0);
-  lv_obj_set_style_text_color(Screen_Track_TrackText, lv_color_white(), 0);
-  lv_obj_set_style_bg_color(Screen_Track_TrackText, lv_color_black(), 0);
-  lv_obj_set_style_radius(Screen_Track_TrackText, LV_RADIUS_CIRCLE, 0);
-  char buf[4];
-  snprintf(buf, sizeof(buf), "%d°", 0);
-  lv_label_set_text(Screen_Track_TrackText, buf);
-  lv_obj_add_event_cb(parent, speedBgClicked, LV_EVENT_CLICKED, NULL);
-}
-#endif
 static void Onboard_create_Variometer(lv_obj_t *parent)
 {
 
