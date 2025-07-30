@@ -20,6 +20,7 @@
  * 02 -> Display with SixPack
  * 03 -> Display with Autopilot, ADSB, Radio, Flight Computer
  * 04 -> Display with EMS: Engine monitoring system
+ * 05 -> Display with Stratux BLE Traffic
  * 
  * Community edition will be free for all builders and personal use as defined by the licensing model
  * Dual licensing for commercial agreement is available
@@ -66,10 +67,51 @@
 //#define RB_ENABLE_GPS_DIAG 1
 //#define RB_ENABLE_CONSOLE_DEBUG 1
 
+
+
+// 1.2.1 Enble Bluetooth Services
+//#define RB02_ESP_BLUETOOTH 1    // ONLY FOR PERSONAL USE this feature is under Partner contract, if you want to sell this you shall have the dual licensing
+
+// 1.2.1 Enble Traffic Services
+#ifdef RB02_ESP_BLUETOOTH
+#define RB02_FLARM_SERIAL 10                     // ONLY FOR PERSONAL USE this feature is under Partner contract, if you want to sell this you shall have the dual licensing
+#define RB_ENABLE_TRAFFIC RB02_FLARM_SERIAL      // ONLY FOR PERSONAL USE this feature is under Partner contract, if you want to sell this you shall have the dual licensing
+#define RB02_BLUETOOTH_DIAG 1                    // ONLY FOR PERSONAL USE this feature is under Partner contract, if you want to sell this you shall have the dual licensing
+#endif
+
+
+
 // 1.1.2 Version is here
-#define RB_VERSION "1.1.25"
+#define RB_VERSION "1.1.27"
 // 1.1.1 Remove tabs with GPS if not installed
-#define RB_ENABLE_GPS 1
+#define RB01_GPS_PROTOCOL_UART  1
+#ifdef RB02_ESP_BLUETOOTH
+#define RB01_GPS_PROTOCOL_BLE   2
+#endif
+#define RB_ENABLE_GPS RB01_GPS_PROTOCOL_UART
 // 1.1.19 Starting getting rid of demo screens
 // #define ENABLE_DEMO_SCREENS 1
 #define VIBRATION_TEST 1
+
+
+// 1.3.1 Enable Engine Monitoring System EMS
+//#define RB_ENABLE_EMS 1      // ONLY FOR PERSONAL USE this feature is under Partner contract, if you want to sell this you shall have the dual licensing
+#ifdef RB_ENABLE_EMS
+#define RB_ENABLE_EMS_CHT 4      // Number of CHT Sensors
+#define RB_ENABLE_EMS_EGT 4      // Number of EGT Sensors
+#define RB04_PROTOCOL_SIMULATOR   0      // EMS Simulator
+#define RB04_PROTOCOL_UART_TTL    1      // EMS Remote device connected via UART channel
+#define RB04_PROTOCOL_BLE         2      // EMS Remote device connected via BLUETOOTH BLE CHAR channel
+#define RB04_PROTOCOL_RS485       3      // EMS Remote device connected via RS485 channel
+#define RB04_PROTOCOL RB04_PROTOCOL_SIMULATOR
+#endif
+
+
+//#define RB_ENABLE_REMOTE_BUTTONS 1
+#ifdef RB_ENABLE_REMOTE_BUTTONS
+#define RB02_BUTTON_BUTTON      1
+#define RB02_BUTTON_KNOB        2
+#ifdef RB02_ESP_BLUETOOTH
+#define RB02_BUTTON_BLE         3
+#endif
+#endif
