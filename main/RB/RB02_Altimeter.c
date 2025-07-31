@@ -27,6 +27,7 @@
 */
 #include "RB02_Altimeter.h"
 #include "RB02_GUIHelpers.h"
+#include "RB02_Config.h"
 #include <stdio.h>
 
 extern lv_style_t style_title;
@@ -54,6 +55,30 @@ lv_obj_t *RB02_Altimeter_CreateScreen(lv_obj_t *parent)
         lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
         lv_label_set_text(label, "RB 02");
         lv_obj_add_style(label, &style_title, LV_STATE_DEFAULT);
+    }
+
+    if (parent != NULL)
+    {
+        lv_obj_t *label = lv_label_create(parent);
+        lv_obj_set_size(label, LV_SIZE_CONTENT,LV_SIZE_CONTENT);
+        lv_obj_align(label, LV_ALIGN_CENTER, -120,-30);
+        lv_obj_set_style_text_font(label, &lv_font_montserrat_16, 0);
+        lv_obj_set_style_text_color(label,lv_color_white(),0);
+        lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
+        lv_label_set_text(label, "GPS");
+    }
+
+    if (parent != NULL && singletonConfig()->ui.altimeterAnalog.labelGPSAltitude == NULL)
+    {
+        lv_obj_t *label = lv_label_create(parent);
+        lv_obj_set_size(label, LV_SIZE_CONTENT,LV_SIZE_CONTENT);
+        lv_obj_align(label, LV_ALIGN_CENTER, -120,0);
+        lv_obj_set_style_text_font(label, &lv_font_montserrat_48, 0);
+        lv_obj_set_style_text_color(label,lv_color_white(),0);
+        lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
+        lv_label_set_text(label, "-----");
+
+        singletonConfig()->ui.altimeterAnalog.labelGPSAltitude = label;
     }
 
     if (parent != NULL && Screen_Altitude_QNH == NULL)

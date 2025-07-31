@@ -39,7 +39,36 @@
 #include "RB02_GPSMap.h"
 #endif
 
+#ifdef RB_ENABLE_TRAFFIC
+#include "RB02_Traffic.h"
+#endif
+
 #define RB02_STRUCTURE_CONFIG 1
+
+
+typedef struct
+{
+    lv_obj_t *Numbers[12];
+    lv_obj_t *Screen_Track_TrackSource;
+    lv_obj_t *Screen_Track_TrackText;
+    lv_obj_t *parent;
+} RB02_Gyro;
+
+
+typedef struct
+{
+    lv_obj_t *labelGPSAltitude;
+} RB02_AltimeterAnalog;
+
+
+typedef struct
+{
+    lv_obj_t *SettingsSpeedSummary;
+#ifdef RB_ENABLE_GPS
+    RB02_Gyro Gyro;
+#endif
+    RB02_AltimeterAnalog altimeterAnalog;
+} RB02_UI;
 
 typedef struct
 {
@@ -56,6 +85,10 @@ typedef struct
 #ifdef RB_ENABLE_MAP
 RB02_GpsMapStatus gpsMapStatus;
 #endif
+#ifdef RB_ENABLE_TRAFFIC
+RB02_TrafficStatus trafficStatus;
+#endif
+    RB02_UI ui;
 } RB02_Status;
 
 extern RB02_Status *rb02Status;

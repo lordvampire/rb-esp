@@ -1755,7 +1755,7 @@ void update_Track_lvgl_tick(lv_timer_t *t)
   COG = COG % 360;
   if (COG != lastCOG)
   {
-    //printf("NMEA: Track %d-->%d\n", lastCOG, COG);
+    // printf("NMEA: Track %d-->%d\n", lastCOG, COG);
     lastCOG = COG;
     // lv_img_set_angle(Screen_Gyro_Gear, COG * 10);
     for (uint8_t n = 0; n < 12; n++)
@@ -1828,6 +1828,12 @@ void update_Altimeter_lvgl_tick(lv_timer_t *t)
   float centsDegree = (360.0 * ((AltimeterInFeet) % 1000)) / 100.0;
   lv_img_set_angle(Screen_Altitude_Miles, milesDegree + 900);
   lv_img_set_angle(Screen_Altitude_Cents, centsDegree + 900);
+
+#ifdef RB_ENABLE_GPS
+  char buf[10];
+  snprintf(buf, sizeof(buf), "%.0f", singletonConfig()->NMEA_DATA.altitude * 3.28084);
+  lv_label_set_text(singletonConfig()->ui.altimeterAnalog.labelGPSAltitude, buf);
+#endif
 }
 #ifdef RB_ENABLE_GPS
 void uartApplyRates()
@@ -1971,8 +1977,6 @@ void RB02_CreateScreens()
   RB02_Traffic_CreateScreen(&(singletonConfig()->trafficStatus));
   lv_obj_add_event_cb(singletonConfig()->trafficStatus.lv_parent, speedBgClicked, LV_EVENT_CLICKED, NULL);
 #endif
-
-
 
   RB02_Gyro_CreateScreen(singletonConfig()->ui.Gyro.parent);
   lv_obj_add_event_cb(singletonConfig()->ui.Gyro.parent, speedBgClicked, LV_EVENT_CLICKED, NULL);
