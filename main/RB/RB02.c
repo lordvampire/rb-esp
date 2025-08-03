@@ -194,7 +194,7 @@ static const int RX_BUF_SIZE = 1024;
 // Prototype declaration
 void lvgl_register_sdcard_fs();
 static lv_obj_t *Onboard_create_Base(lv_obj_t *parent, const lv_img_dsc_t *backgroundImage);
-#ifdef RB_ENABLE_GPS
+#ifdef RB_ENABLE_SPD
 static void Onboard_create_Speed(lv_obj_t *parent);
 #endif
 static void Onboard_create_Attitude(lv_obj_t *parent);
@@ -259,10 +259,8 @@ typedef enum
   RB02_TAB_SYN,
 // RB02_TAB_HSI,
 #endif
-#ifdef RB_ENABLE_GPS
 #ifdef RB_ENABLE_SPD
   RB02_TAB_SPD,
-#endif
 #endif
 #ifdef RB_ENABLE_ATT
   RB02_TAB_ATT,
@@ -466,7 +464,7 @@ void ApplyCoding(void)
   StartupPage = 0;
 #else
   DeviceIsDemoMode = 0;
-  StartupPage = RB02_TAB_AAT;
+  StartupPage = RB02_TAB_SET-1;
 #endif
 }
 
@@ -524,11 +522,10 @@ void RB02_Example1(void)
   // lv_obj_t *ty = lv_tabview_add_tab(tv, "HSI");
   // lv_obj_t *t0 = lv_tabview_add_tab(tv, "Map");
 #endif
-#ifdef RB_ENABLE_GPS
 #ifdef RB_ENABLE_SPD
   lv_obj_t *t1 = lv_tabview_add_tab(tv, "Speed");
 #endif
-#endif
+
 #ifdef RB_ENABLE_ATT
   lv_obj_t *t2 = lv_tabview_add_tab(tv, "Attitude");
 #endif
@@ -578,6 +575,7 @@ void RB02_Example1(void)
 
 #ifdef RB_ENABLE_GPS_DIAG
   lv_obj_t *tGPSDiag = lv_tabview_add_tab(tv, "GPS Diag");
+  lv_obj_add_event_cb(tGPSDiag, speedBgClicked, LV_EVENT_CLICKED, NULL);
 #endif
 
 // lv_obj_t *t10 = lv_tabview_add_tab(tv, "Demo");
@@ -600,11 +598,10 @@ void RB02_Example1(void)
   // 1.1.19 Map
   lvgl_register_sdcard_fs();
 
-#ifdef RB_ENABLE_GPS
 #ifdef RB_ENABLE_SPD
   Onboard_create_Speed(t1);
 #endif
-#endif
+
 #ifdef RB_ENABLE_ATT
   Onboard_create_Attitude(t2);
 #endif
@@ -741,7 +738,7 @@ lv_obj_t *RB_LV_Helper_CreateImageFromFile(lv_obj_t *parent, const void *backgro
   lv_obj_clear_flag(parent, LV_OBJ_FLAG_SCROLLABLE);
   return backgroundImage;
 }
-
+#ifdef RB_ENABLE_GPS
 void nmea_GGA_UpdatedValueFor(uint8_t csvCounter, int32_t finalNumber, uint8_t decimalCounter)
 {
 
@@ -1058,6 +1055,8 @@ bool nmea_GGA_mini_parser(const uint8_t *sentence, uint16_t length)
   return true;
 }
 
+#endif
+
 #ifdef RB_ENABLE_GPS
 void uart_fetch_data()
 {
@@ -1313,12 +1312,14 @@ void nvsRestoreGMeter()
     printf("Gyro Calibration %.1f %.1f %.1f\n", GyroCalibration.x, GyroCalibration.z, GyroCalibration.z);
 #endif
 
+#ifdef RB_ENABLE_GPS
     // 1.1.25B
     int32_t i32buffer = 0;
     nvs_get_i32(my_handle, "latitude100", &i32buffer);
     singletonConfig()->NMEA_DATA.latitude = i32buffer / 100.0;
     nvs_get_i32(my_handle, "longitude100", &i32buffer);
     singletonConfig()->NMEA_DATA.longitude = i32buffer / 100.0;
+#endif
     nvs_close(my_handle);
   }
 }
@@ -1786,11 +1787,14 @@ void Get_BMP280(void)
 {
   example1_BMP280_lvgl_tick(NULL);
 }
-
+#ifdef RB_ENABLE_SPD
 void update_Speed_lvgl_tick(lv_timer_t *t)
 {
   static int lastSpeed = -1;
-  int speed = singletonConfig()->NMEA_DATA.speed * 10;
+  int speed = 0;
+#ifdef RB_ENABLE_GPS
+  speed = singletonConfig()->NMEA_DATA.speed * 10;
+#endif
   if (speed != lastSpeed)
   {
     // printf("NMEA: Speed %d-->%d m/s Angle: %ld\n", lastSpeed, speed, (int32_t)(speed));
@@ -1822,11 +1826,17 @@ void update_Speed_lvgl_tick(lv_timer_t *t)
     lv_img_set_angle(Screen_Speed_SpeedTick, speedAngle + 900);
 
     char buf[15];
-    snprintf(buf, sizeof(buf), "%.0f", singletonConfig()->NMEA_DATA.speed / isKt); // KT
+    float fspeed = 0;
+  #ifdef RB_ENABLE_GPS
+    fspeed = singletonConfig()->NMEA_DATA.speed;
+  #endif
+    snprintf(buf, sizeof(buf), "%.0f", fspeed / isKt); // KT
     lv_label_set_text(Screen_Speed_SpeedText, buf);
   }
 }
+#endif
 
+#ifdef RB_ENABLE_VAR
 void update_Variometer_lvgl_tick(lv_timer_t *t)
 {
   // 1.0.9 Variometer is *100 and 1Hz
@@ -1836,7 +1846,9 @@ void update_Variometer_lvgl_tick(lv_timer_t *t)
   int32_t VDegree = ((Variometer * 6.0 / 10.0) * 36.0 / 40);
   lv_img_set_angle(Screen_Variometer_Cents, VDegree);
 }
+#endif
 
+#ifdef RB_ENABLE_ALT
 void update_Altimeter_lvgl_tick(lv_timer_t *t)
 {
   // Altimeter Analog Screen
@@ -1853,6 +1865,7 @@ void update_Altimeter_lvgl_tick(lv_timer_t *t)
   lv_label_set_text(singletonConfig()->ui.altimeterAnalog.labelGPSAltitude, buf);
 #endif
 }
+#endif
 #ifdef RB_ENABLE_GPS
 void uartApplyRates()
 {
@@ -1995,9 +2008,10 @@ void RB02_CreateScreens()
   RB02_Traffic_CreateScreen(&(singletonConfig()->trafficStatus));
   lv_obj_add_event_cb(singletonConfig()->trafficStatus.lv_parent, speedBgClicked, LV_EVENT_CLICKED, NULL);
 #endif
-
+#ifdef RB_ENABLE_TRK
   RB02_Gyro_CreateScreen(singletonConfig()->ui.Gyro.parent);
   lv_obj_add_event_cb(singletonConfig()->ui.Gyro.parent, speedBgClicked, LV_EVENT_CLICKED, NULL);
+#endif
 }
 
 void rb_increase_lvgl_tick(lv_timer_t *t)
@@ -2216,9 +2230,11 @@ void rb_increase_lvgl_tick(lv_timer_t *t)
     break;
 #endif
 
-#ifdef RB_ENABLE_GPS
+#ifdef RB_ENABLE_SPD
   case RB02_TAB_SPD:
+#ifdef RB_ENABLE_GPS
     uart_fetch_data();
+#endif
     update_Speed_lvgl_tick(t);
     if (Operative_GPS && OperativeWarningVisible == true)
     {
@@ -2237,9 +2253,12 @@ void rb_increase_lvgl_tick(lv_timer_t *t)
       }
     }
     break;
+#endif
 #ifdef RB_ENABLE_MAP
   case RB02_TAB_MAP:
+#ifdef RB_ENABLE_GPS
     uart_fetch_data();
+#endif
     RB02_GPSMap_Tick(&singletonConfig()->gpsMapStatus, &singletonConfig()->NMEA_DATA, t0);
     if (Operative_GPS && OperativeWarningVisible == true)
     {
@@ -2259,7 +2278,7 @@ void rb_increase_lvgl_tick(lv_timer_t *t)
     }
     break;
 #endif
-#endif
+#ifdef RB_ENABLE_TRK
   case RB02_TAB_TRK:
 #ifdef RB_ENABLE_GPS
     uart_fetch_data();
@@ -2303,8 +2322,10 @@ void rb_increase_lvgl_tick(lv_timer_t *t)
     }
 #endif
     break;
+#endif
   case RB02_TAB_DEV:
     break;
+#ifdef RB_ENABLE_VAR
   case RB02_TAB_VAR:
     update_Variometer_lvgl_tick(t);
     if (Operative_BMP280 && OperativeWarningVisible == true)
@@ -2324,6 +2345,8 @@ void rb_increase_lvgl_tick(lv_timer_t *t)
       }
     }
     break;
+#endif
+#ifdef RB_ENABLE_ALT
   case RB02_TAB_ALT:
     update_Altimeter_lvgl_tick(t);
     if (Operative_BMP280 && OperativeWarningVisible == true)
@@ -2343,6 +2366,8 @@ void rb_increase_lvgl_tick(lv_timer_t *t)
       }
     }
     break;
+#endif
+#ifdef RB_ENABLE_ALD
   case RB02_TAB_ALD:
     // 1.1.17 Add GPS Altimeter
 #ifdef RB_ENABLE_GPS
@@ -2366,6 +2391,8 @@ void rb_increase_lvgl_tick(lv_timer_t *t)
       }
     }
     break;
+#endif
+#ifdef RB_ENABLE_ATT
   case RB02_TAB_ATT:
     if (GPSAccelerationForAttitudeCompensationEnabled == true)
     {
@@ -2396,6 +2423,8 @@ void rb_increase_lvgl_tick(lv_timer_t *t)
       }
     }
     break;
+#endif
+#ifdef RB_ENABLE_TRN
   case RB02_TAB_TRN:
     update_TurnSlip_lvgl_tick(t);
     if (Operative_Attitude && OperativeWarningVisible == true)
@@ -2415,6 +2444,8 @@ void rb_increase_lvgl_tick(lv_timer_t *t)
       }
     }
     break;
+#endif
+#ifdef RB_ENABLE_GMT
   case RB02_TAB_GMT:
     update_GMeter_lvgl_tick(t);
     if (Operative_Attitude && OperativeWarningVisible == true)
@@ -2434,6 +2465,7 @@ void rb_increase_lvgl_tick(lv_timer_t *t)
       }
     }
     break;
+#endif
 #ifdef RB_ENABLE_GPS_DIAG
   case RB02_TAB_GDG:
     uart_fetch_data();
@@ -2449,12 +2481,15 @@ void rb_increase_lvgl_tick(lv_timer_t *t)
     update_Vibration_lvgl_tick(t);
     break;
 #endif
+#ifdef RB_ENABLE_CLK
   case RB02_TAB_CLK:
 #ifdef RB_ENABLE_GPS
     uart_fetch_data();
 #endif
     update_Clock_lvgl_tick(t);
     break;
+#endif
+
   case RB02_TAB_SET:
   {
     char buf[4 + 4 + 4 + 4 + 4 + 4 + 22];
@@ -2508,6 +2543,7 @@ void rb_increase_lvgl_tick(lv_timer_t *t)
 #endif
   }
   break;
+
   }
 }
 
@@ -2590,12 +2626,14 @@ static void mbox1_cage_event_cb(lv_event_t *e)
     const char *txt = lv_msgbox_get_active_btn_text(msgbox);
     if (txt)
     {
+      #ifdef RB_ENABLE_GPS
       if (strcmp("QNH", txt) == 0)
       {
         QNH = RB02_SuggestedQNH(singletonConfig()->NMEA_DATA.altitude, bmp280Pressure);
         RB02_AltimeterQNHUpdated();
         singletonConfig()->settingsAutoQNH = 1;
       }
+      #endif
       if (strcmp("CAGE", txt) == 0)
       {
         // TODO: make an avg
@@ -2622,7 +2660,10 @@ void lv_att_reset_msgbox(void)
   static const char *btns[] = {"QNH", "CAGE", "CANCEL", ""};
 
   char buf[100];
-  uint16_t SuggestedQNH = RB02_SuggestedQNH(singletonConfig()->NMEA_DATA.altitude, bmp280Pressure);
+  uint16_t SuggestedQNH = 1013;
+#ifdef RB_ENABLE_GPS
+  SuggestedQNH =RB02_SuggestedQNH(singletonConfig()->NMEA_DATA.altitude, bmp280Pressure);
+#endif
   snprintf(buf, sizeof(buf), "Would you like to cage sensors?\nAuto QNH=%d", SuggestedQNH);
 
   mbox1 = lv_msgbox_create(NULL, "Attitude", buf, btns, true);
@@ -2681,7 +2722,11 @@ static void actionInTab(touchLocation location)
 #ifdef RB_ENABLE_AAT
     lv_tabview_set_act(tv, RB02_TAB_AAT, LV_ANIM_OFF);
 #else
+#ifdef RB_ENABLE_ATT
     lv_tabview_set_act(tv, RB02_TAB_ATT, LV_ANIM_OFF);
+#else
+    lv_tabview_set_act(tv, 0, LV_ANIM_OFF);
+#endif
 #endif
     break;
   default:
@@ -2690,7 +2735,7 @@ static void actionInTab(touchLocation location)
 
   switch (((lv_tabview_t *)tv)->tab_cur)
   {
-
+#ifdef RB_ENABLE_TRK
   case RB02_TAB_TRK:
     switch (location)
     {
@@ -2708,6 +2753,7 @@ static void actionInTab(touchLocation location)
     }
     RB02_Gyro_Tick(&(singletonConfig()->ui.Gyro));
     break;
+#endif
 #ifdef RB_ENABLE_TRAFFIC
   case RB02_TAB_RDR:
     switch (location)
@@ -2741,8 +2787,12 @@ static void actionInTab(touchLocation location)
 #ifdef RB_ENABLE_AAT
   case RB02_TAB_AAT:
 #endif
+#ifdef RB_ENABLE_ALT
   case RB02_TAB_ALT:
+#endif
+#ifdef RB_ENABLE_ALD
   case RB02_TAB_ALD:
+#endif
     switch (location)
     {
     case RB02_TOUCH_N:
@@ -2762,6 +2812,7 @@ static void actionInTab(touchLocation location)
 
     RB02_AltimeterQNHUpdated();
     break;
+#ifdef RB_ENABLE_CLK
   case RB02_TAB_CLK:
     switch (location)
     {
@@ -2817,6 +2868,8 @@ static void actionInTab(touchLocation location)
       break;
     }
     break;
+#endif
+#ifdef RB_ENABLE_GMT
   case RB02_TAB_GMT:
     switch (location)
     {
@@ -2829,9 +2882,14 @@ static void actionInTab(touchLocation location)
       break;
     }
     break;
-
+#endif
+#ifdef RB_ENABLE_VBR
   case RB02_TAB_VBR:
+#endif
+#ifdef RB_ENABLE_TRN
   case RB02_TAB_TRN:
+#endif
+#ifdef RB_ENABLE_ATT
   case RB02_TAB_ATT:
     switch (location)
     {
@@ -2842,6 +2900,7 @@ static void actionInTab(touchLocation location)
       break;
     }
     break;
+#endif
   default:
     break;
   }
@@ -2999,7 +3058,7 @@ static void AltimeterOverrideChanged(lv_event_t *e)
   // Store
   nvsStorePCal();
 }
-
+#ifdef RB_ENABLE_SPD
 static void SpeedDegreeStartChanged(lv_event_t *e)
 {
   uint16_t new_Start = 15 * lv_slider_get_value(t_speedStart);
@@ -3034,6 +3093,8 @@ static void SpeedDegreeStartChanged(lv_event_t *e)
 
   nvsStoreSpeedArc();
 }
+#endif
+
 static void DisableFilteringChanged(lv_event_t *e)
 {
   uint8_t FilterMoltiplierInt = lv_slider_get_value(lv_event_get_target(e));
@@ -3720,7 +3781,7 @@ static void Onboard_create_Setup(lv_obj_t *parent)
     lineY += 30;
   }
 #endif
-#ifdef RB_ENABLE_GPS
+#ifdef RB_ENABLE_SPD
   if (true)
   {
     lv_obj_t *label = lv_label_create(parent);
@@ -4023,6 +4084,7 @@ static void Onboard_create_Setup(lv_obj_t *parent)
   lv_obj_add_event_cb(parent, speedBgClicked, LV_EVENT_CLICKED, NULL);
 }
 
+#ifdef RB_ENABLE_CLK
 static void Onboard_create_Clock(lv_obj_t *parent)
 {
 
@@ -4116,7 +4178,9 @@ static void Onboard_create_Clock(lv_obj_t *parent)
   // 1.1.9 Remove scrolling for Turbolence touch screen
   lv_obj_add_flag(parent, LV_OBJ_FLAG_SCROLLABLE);
 }
+#endif
 
+#ifdef RB_ENABLE_ALD
 static void Onboard_create_AltimeterDigital(lv_obj_t *parent)
 {
   // 1.1.1 Branding RB-02 on every screen
@@ -4220,6 +4284,7 @@ static void Onboard_create_AltimeterDigital(lv_obj_t *parent)
   }
   lv_obj_add_event_cb(parent, speedBgClicked, LV_EVENT_CLICKED, NULL);
 }
+#endif
 
 static void CreateSingleDigit(lv_obj_t *parent, const lv_img_dsc_t *font, lv_obj_t **segments, int dx, int dy)
 {
@@ -4285,7 +4350,7 @@ void draw_arch(lv_obj_t *parent, const lv_img_dsc_t *t, uint16_t degreeStartSlid
     lv_img_set_angle(slice, degree * 10);
   }
 }
-#ifdef RB_ENABLE_GPS
+#ifdef RB_ENABLE_SPD
 static void Onboard_create_Speed(lv_obj_t *parent)
 {
   // Degree shall be multiples of 7.5
@@ -4376,6 +4441,8 @@ static void Onboard_create_Speed(lv_obj_t *parent)
   lv_obj_add_event_cb(parent, speedBgClicked, LV_EVENT_CLICKED, NULL);
 }
 #endif
+
+#ifdef RB_ENABLE_ATT
 static void Onboard_create_Attitude(lv_obj_t *parent)
 {
 
@@ -4454,7 +4521,9 @@ static void Onboard_create_Attitude(lv_obj_t *parent)
   // 1.1.18 Roadmap to new indicator
   // rotate_AttitudeGearByDegree(0);
 }
+#endif
 
+#ifdef RB_ENABLE_TRN
 static void Onboard_create_TurnSlip(lv_obj_t *parent)
 {
   Onboard_create_Base(parent, &turn_coordinator);
@@ -4513,7 +4582,9 @@ static void Onboard_create_TurnSlip(lv_obj_t *parent)
 
   // 1.1.13 Warning labels
 }
+#endif
 
+#ifdef RB_ENABLE_VAR
 static void Onboard_create_Variometer(lv_obj_t *parent)
 {
 
@@ -4538,6 +4609,7 @@ static void Onboard_create_Variometer(lv_obj_t *parent)
   lv_obj_set_size(Screen_Variometer_Cents, fi_needle.header.w, fi_needle.header.h);
   lv_obj_align(Screen_Variometer_Cents, LV_ALIGN_CENTER, 0, 0);
 }
+#endif
 
 #ifdef VIBRATION_TEST
 /*
@@ -4927,6 +4999,7 @@ static void Onboard_create_VibrationTest(lv_obj_t *parent)
 }
 #endif
 
+#ifdef RB_ENABLE_GMT
 static void Onboard_create_GMeter(lv_obj_t *parent)
 {
   // Onboard_create_Base(parent, &GMeter);
@@ -4990,6 +5063,9 @@ static void Onboard_create_GMeter(lv_obj_t *parent)
   lv_obj_set_style_text_font(GMeterLabelMax, &lv_font_montserrat_48, 0);
   lv_obj_add_style(GMeterLabelMax, &style_title, LV_STATE_DEFAULT);
 }
+#endif
+
+
 void turnOnOffDigitsSymbols(lv_obj_t **segments, uint8_t symbol)
 {
   switch (symbol)
