@@ -28,5 +28,7 @@
 #pragma once
 
 #include "RB02.h"
-
+#ifdef RB_ENABLE_TRK
 lv_obj_t *RB02_Gyro_CreateScreen(lv_obj_t *parent);
+void RB02_Gyro_Tick(RB02_Gyro *gyroStatus);
+#endif

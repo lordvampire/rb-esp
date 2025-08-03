@@ -26,6 +26,7 @@
  *
 */
 #include "RB02_Gyro.h"
+#ifdef RB_ENABLE_TRK
 
 #include "RB02_GUIHelpers.h"
 #include <stdio.h>
@@ -76,7 +77,7 @@ lv_obj_t *RB02_Gyro_CreateScreen(lv_obj_t *parent)
     {
         lv_obj_t *label = lv_label_create(parent);
         lv_obj_set_size(label, 300, 40);
-        lv_obj_align(label, LV_ALIGN_CENTER, 0, -26);
+        lv_obj_align(label, LV_ALIGN_CENTER, 0, -25);
         lv_obj_set_style_text_font(label, &lv_font_montserrat_16, 0);
         lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
 #ifdef RB_ENABLE_GPS
@@ -84,7 +85,7 @@ lv_obj_t *RB02_Gyro_CreateScreen(lv_obj_t *parent)
 #else
         lv_label_set_text(label, "GYRO");
 #endif
-
+        lv_obj_set_style_text_color(label, lv_color_white(), 0);
         singletonConfig()->ui.Gyro.Screen_Track_TrackSource = label;
     }
 
@@ -108,3 +109,39 @@ lv_obj_t *RB02_Gyro_CreateScreen(lv_obj_t *parent)
     return NULL;
 }
 
+void RB02_Gyro_MoveNumber(lv_obj_t *item, int16_t degree, uint8_t distance)
+{
+  int16_t sin = lv_trigo_sin(degree - 90) / 327;
+  int16_t cos = lv_trigo_cos(degree - 90) / 327;
+
+  int16_t x = (cos * distance) / 100;
+  int16_t y = (sin * distance) / 100;
+
+  lv_obj_align(item, LV_ALIGN_CENTER, x, y);
+  lv_img_set_angle(item, degree * 10.0);
+}
+
+extern float AttitudeYaw;
+
+void RB02_Gyro_Tick(RB02_Gyro *gyroStatus)
+{
+    static int16_t lastCOG = -1;
+    int16_t COG = -AttitudeYaw + gyroStatus->AttitudeYawCorrection;
+    if (COG < 0)
+        COG = COG + 360;
+    COG = COG % 360;
+    if (COG != lastCOG)
+    {
+        lastCOG = COG;
+        for (uint8_t n = 0; n < 12; n++)
+        {
+            RB02_Gyro_MoveNumber(gyroStatus->Numbers[n], -COG + (360 / 12) * n, 180);
+        }
+
+        char buf[15];
+        snprintf(buf, sizeof(buf), "%d°", COG);
+        lv_label_set_text(gyroStatus->Screen_Track_TrackText, buf);
+    }
+}
+
+#endif
