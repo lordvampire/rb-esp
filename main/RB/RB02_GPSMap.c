@@ -619,8 +619,8 @@ lv_obj_t *RB02_GPSMap_CreateScreen(RB02_GpsMapStatus *gpsMapStatus, lv_obj_t *pa
     {
         lv_obj_t *label = lv_label_create(parent);
         lv_obj_set_size(label, 150, 20);
-        lv_obj_align(label, LV_ALIGN_CENTER, 0, 215);
-        lv_obj_set_style_text_font(label, &lv_font_montserrat_16, 0);
+        lv_obj_align(label, LV_ALIGN_CENTER, 0, 204);
+        lv_obj_set_style_text_font(label, &lv_font_montserrat_24, 0);
         lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
         lv_label_set_text(label, "-------");
         gpsMapStatus->labelLatitude = label;
@@ -630,8 +630,8 @@ lv_obj_t *RB02_GPSMap_CreateScreen(RB02_GpsMapStatus *gpsMapStatus, lv_obj_t *pa
     {
         lv_obj_t *label = lv_label_create(parent);
         lv_obj_set_size(label, 150, 20);
-        lv_obj_align(label, LV_ALIGN_CENTER, 0, 230);
-        lv_obj_set_style_text_font(label, &lv_font_montserrat_16, 0);
+        lv_obj_align(label, LV_ALIGN_CENTER, 0, 222);
+        lv_obj_set_style_text_font(label, &lv_font_montserrat_24, 0);
         lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
         lv_label_set_text(label, "--------");
         gpsMapStatus->labelLongitude = label;
