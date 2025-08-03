@@ -20,6 +20,7 @@
  * 02 -> Display with SixPack
  * 03 -> Display with Autopilot, ADSB, Radio, Flight Computer
  * 04 -> Display with EMS: Engine monitoring system
+ * 05 -> Display with Stratux BLE Traffic
  *
  * Community edition will be free for all builders and personal use as defined by the licensing model
  * Dual licensing for commercial agreement is available
@@ -159,8 +160,6 @@ extern int32_t Variometer;
 #define CONFIG_NMEA_PARSER_UART_RXD 44
 #define CONFIG_NMEA_STATEMENT_RMC 1
 
-int16_t AttitudeYawCorrection = 0;
-
 // 1.1.12 Fusion
 float FusionAHRSDeltaTrackFromGPS = 0;
 float GPSLastTrack = 0;
@@ -252,30 +251,51 @@ typedef enum
 #ifdef ENABLE_VENDOR
   RB02_TAB_SPL,
 #endif
+#ifdef RB_ENABLE_EMS
+  RB02_TAB_EMS,
+#endif
 #ifdef ENABLE_DEMO_SCREENS
   RB02_TAB_SYS,
   RB02_TAB_SYN,
 // RB02_TAB_HSI,
 #endif
 #ifdef RB_ENABLE_GPS
+#ifdef RB_ENABLE_SPD
   RB02_TAB_SPD,
 #endif
+#endif
+#ifdef RB_ENABLE_ATT
   RB02_TAB_ATT,
+#endif
 #ifdef RB_ENABLE_AAT
   RB02_TAB_AAT,
 #endif
+#ifdef RB_ENABLE_AAT
   RB02_TAB_ALT,
+#endif
+#ifdef RB_ENABLE_ALD
   RB02_TAB_ALD,
+#endif
+#ifdef RB_ENABLE_TRN
   RB02_TAB_TRN,
+#endif
 #ifdef RB_ENABLE_GPS
+#ifdef RB_ENABLE_TRK
   RB02_TAB_TRK,
+#endif
 #ifdef RB_ENABLE_MAP
   RB02_TAB_MAP,
 #endif
 #endif
+#ifdef RB_ENABLE_VAR
   RB02_TAB_VAR,
+#endif
+#ifdef RB_ENABLE_GMT
   RB02_TAB_GMT,
+#endif
+#ifdef RB_ENABLE_CLK
   RB02_TAB_CLK,
+#endif
 #ifdef RB_ENABLE_CHECKLIST
   RB02_TAB_CHK,
 #endif
@@ -494,7 +514,9 @@ void RB02_Example1(void)
   lv_obj_add_event_cb(ts, speedBgClicked, LV_EVENT_CLICKED, NULL);
   lvTabSplashScreen = ts;
 #endif
-
+#ifdef RB_ENABLE_EMS
+  lv_obj_t *tEMS = lv_tabview_add_tab(tv, "EMS");
+#endif
 #ifdef ENABLE_DEMO_SCREENS
   lv_obj_t *tu = lv_tabview_add_tab(tv, "SynthSide");
   lv_obj_t *tz = lv_tabview_add_tab(tv, "SynthBack");
@@ -503,30 +525,42 @@ void RB02_Example1(void)
   // lv_obj_t *t0 = lv_tabview_add_tab(tv, "Map");
 #endif
 #ifdef RB_ENABLE_GPS
+#ifdef RB_ENABLE_SPD
   lv_obj_t *t1 = lv_tabview_add_tab(tv, "Speed");
 #endif
+#endif
+#ifdef RB_ENABLE_ATT
   lv_obj_t *t2 = lv_tabview_add_tab(tv, "Attitude");
+#endif
 #ifdef RB_ENABLE_AAT
   advancedAttitude_Status.lv_parent = lv_tabview_add_tab(tv, "Advanced");
 #endif
-
+#ifdef RB_ENABLE_ALT
   lv_obj_t *t3 = lv_tabview_add_tab(tv, "Altimeter");
+#endif
+#ifdef RB_ENABLE_ALD
   lv_obj_t *t3b = lv_tabview_add_tab(tv, "Altimeter");
+#endif
+#ifdef RB_ENABLE_TRN
   lv_obj_t *t4 = lv_tabview_add_tab(tv, "TurnSlip");
+#endif
+#ifdef RB_ENABLE_TRK
   // Track backup as Gyroscope Directional
   singletonConfig()->ui.Gyro.parent = lv_tabview_add_tab(tv, "Track");
+#endif
 #ifdef RB_ENABLE_MAP
   t0 = lv_tabview_add_tab(tv, "Map"); // 1.1.19 Last version with demo screens
 #endif
+#ifdef RB_ENABLE_VAR
   lv_obj_t *t6 = lv_tabview_add_tab(tv, "Variometer");
+#endif
+#ifdef RB_ENABLE_GMT
   lv_obj_t *t7 = lv_tabview_add_tab(tv, "GMeter");
-#ifdef RB_ENABLE_GPS
+#endif
+#ifdef RB_ENABLE_CLK
   // TODO: Rename to TMR
   lv_obj_t *t8 = lv_tabview_add_tab(tv, "Clock");
   // Add the big analog clock with local time
-#else
-  // TODO: Rename to TMR
-  lv_obj_t *t8 = lv_tabview_add_tab(tv, "Clock");
 #endif
   // 1.1.19
 #ifdef RB_ENABLE_CHECKLIST
@@ -546,7 +580,11 @@ void RB02_Example1(void)
   lv_obj_t *tGPSDiag = lv_tabview_add_tab(tv, "GPS Diag");
 #endif
 
-  // lv_obj_t *t10 = lv_tabview_add_tab(tv, "Demo");
+// lv_obj_t *t10 = lv_tabview_add_tab(tv, "Demo");
+#ifdef RB_ENABLE_EMS
+  Onboard_create_Base(tEMS, &EMSBackground);
+  lv_obj_add_event_cb(tEMS, speedBgClicked, LV_EVENT_CLICKED, NULL);
+#endif
 #ifdef ENABLE_DEMO_SCREENS
   Onboard_create_Base(tu, &RoundSynthViewSide);
   lv_obj_add_event_cb(tu, speedBgClicked, LV_EVENT_CLICKED, NULL);
@@ -563,14 +601,23 @@ void RB02_Example1(void)
   lvgl_register_sdcard_fs();
 
 #ifdef RB_ENABLE_GPS
+#ifdef RB_ENABLE_SPD
   Onboard_create_Speed(t1);
 #endif
+#endif
+#ifdef RB_ENABLE_ATT
   Onboard_create_Attitude(t2);
+#endif
+#ifdef RB_ENABLE_ALT
   RB02_Altimeter_CreateScreen(t3);
   lv_obj_add_event_cb(t3, speedBgClicked, LV_EVENT_CLICKED, NULL);
-
+#endif
+#ifdef RB_ENABLE_ALD
   Onboard_create_AltimeterDigital(t3b);
+#endif
+#ifdef RB_ENABLE_TRN
   Onboard_create_TurnSlip(t4);
+#endif
 #ifdef RB_ENABLE_GPS
 #ifdef RB_ENABLE_MAP
   RB02_GPSMap_CreateScreen(&singletonConfig()->gpsMapStatus, t0);
@@ -578,9 +625,16 @@ void RB02_Example1(void)
   lv_obj_clear_flag(t0, LV_OBJ_FLAG_GESTURE_BUBBLE);
 #endif
 #endif
+#ifdef RB_ENABLE_VAR
   Onboard_create_Variometer(t6);
+#endif
+#ifdef RB_ENABLE_GMT
   Onboard_create_GMeter(t7);
+#endif
+#ifdef RB_ENABLE_CLK
   Onboard_create_Clock(t8);
+#endif
+
   // 1.1.3 Display unique serial number for device tracking
   esp_efuse_mac_get_default((uint8_t *)(&_chipmacid));
 #ifdef RB_ENABLE_CONSOLE_DEBUG
@@ -1560,7 +1614,7 @@ void update_TurnSlip_lvgl_tick(lv_timer_t *t)
 
   lv_label_set_text(Screen_TurnSlip_Obj_Label, buf);
 
-  float range_X = 100;
+  float range_X = 120;
   float range_Y = 16;
   lv_obj_set_pos(Screen_TurnSlip_Obj_Ball, -range_X * fay, 88 - abs((int)(range_Y * fay)));
   // 1.1.3 Bugfix: Bias was not applied to Turn & Slip
@@ -1731,42 +1785,6 @@ void example1_BMP280_lvgl_tick(lv_timer_t *t)
 void Get_BMP280(void)
 {
   example1_BMP280_lvgl_tick(NULL);
-}
-
-void RB02_Gyro_MoveNumber(lv_obj_t *item, int16_t degree, uint8_t distance)
-{
-  int16_t sin = lv_trigo_sin(degree - 90) / 327;
-  int16_t cos = lv_trigo_cos(degree - 90) / 327;
-
-  int16_t x = (cos * distance) / 100;
-  int16_t y = (sin * distance) / 100;
-
-  lv_obj_align(item, LV_ALIGN_CENTER, x, y);
-  lv_img_set_angle(item, degree * 10.0);
-}
-
-void update_Track_lvgl_tick(lv_timer_t *t)
-{
-  static int16_t lastCOG = 0;
-  // int32_t COG = -singletonConfig()->NMEA_DATA.cog * 10;
-  int16_t COG = AttitudeYaw + AttitudeYawCorrection;
-  if (COG < 0)
-    COG = COG + 360;
-  COG = COG % 360;
-  if (COG != lastCOG)
-  {
-    // printf("NMEA: Track %d-->%d\n", lastCOG, COG);
-    lastCOG = COG;
-    // lv_img_set_angle(Screen_Gyro_Gear, COG * 10);
-    for (uint8_t n = 0; n < 12; n++)
-    {
-      RB02_Gyro_MoveNumber(singletonConfig()->ui.Gyro.Numbers[n], -COG + (360 / 12) * n, 180);
-    }
-
-    char buf[15];
-    snprintf(buf, sizeof(buf), "%d°", COG);
-    lv_label_set_text(singletonConfig()->ui.Gyro.Screen_Track_TrackText, buf);
-  }
 }
 
 void update_Speed_lvgl_tick(lv_timer_t *t)
@@ -2246,18 +2264,31 @@ void rb_increase_lvgl_tick(lv_timer_t *t)
 #ifdef RB_ENABLE_GPS
     uart_fetch_data();
 #endif
+    bool GyroWillUseTheGPS = false;
+
     if (Operative_GPS == true)
     {
-      // Gyroscope alignment managed by the new algorithm
-      AttitudeYawCorrection = (singletonConfig()->NMEA_DATA.cog - AttitudeYaw);
+      if (singletonConfig()->NMEA_DATA.speed > 5)
+      {
+        GyroWillUseTheGPS = true;
+      }
     }
-    update_Track_lvgl_tick(t);
+    if (GyroWillUseTheGPS == true)
+    {
+      // Gyroscope alignment managed by the new algorithm
+      singletonConfig()->ui.Gyro.AttitudeYawCorrection = (singletonConfig()->NMEA_DATA.cog - (-AttitudeYaw));
+      lv_label_set_text(singletonConfig()->ui.Gyro.Screen_Track_TrackSource, "GPS TRACK");
+    }
+    else
+    {
+      lv_label_set_text(singletonConfig()->ui.Gyro.Screen_Track_TrackSource, "GYRO");
+    }
+    RB02_Gyro_Tick(&(singletonConfig()->ui.Gyro));
 #ifdef RB_ENABLE_GPS
     if (Operative_GPS && OperativeWarningVisible == true)
     {
       lv_obj_add_flag(OperativeWarning, LV_OBJ_FLAG_HIDDEN);
       OperativeWarningVisible = false;
-      lv_label_set_text(singletonConfig()->ui.Gyro.Screen_Track_TrackSource, "GPS TRACK");
     }
     else
     {
@@ -2265,7 +2296,6 @@ void rb_increase_lvgl_tick(lv_timer_t *t)
       {
         lv_obj_clear_flag(OperativeWarning, LV_OBJ_FLAG_HIDDEN);
         OperativeWarningVisible = true;
-        lv_label_set_text(singletonConfig()->ui.Gyro.Screen_Track_TrackSource, "GYRO");
       }
       else
       {
@@ -2668,14 +2698,15 @@ static void actionInTab(touchLocation location)
       lv_att_reset_msgbox();
       break;
     case RB02_TOUCH_N:
-      AttitudeYawCorrection = AttitudeYawCorrection + 10;
+      singletonConfig()->ui.Gyro.AttitudeYawCorrection = singletonConfig()->ui.Gyro.AttitudeYawCorrection + 10;
       break;
     case RB02_TOUCH_S:
-      AttitudeYawCorrection = AttitudeYawCorrection - 10;
+      singletonConfig()->ui.Gyro.AttitudeYawCorrection = singletonConfig()->ui.Gyro.AttitudeYawCorrection - 10;
       break;
     default:
       break;
     }
+    RB02_Gyro_Tick(&(singletonConfig()->ui.Gyro));
     break;
 #ifdef RB_ENABLE_TRAFFIC
   case RB02_TAB_RDR:
