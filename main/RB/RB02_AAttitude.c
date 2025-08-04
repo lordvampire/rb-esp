@@ -2,7 +2,7 @@
  * This file is part of RB.
  *
  * Copyright (C) 2024 XIAPROJECTS SRL
- * 
+ *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as published
  * by the Free Software Foundation, version 3.
@@ -20,7 +20,8 @@
  * 02 -> Display with SixPack
  * 03 -> Display with Autopilot, ADSB, Radio, Flight Computer
  * 04 -> Display with EMS: Engine monitoring system
- * 
+ * 05 -> Display with Stratux BLE Traffic
+ *
  * Community edition will be free for all builders and personal use as defined by the licensing model
  * Dual licensing for commercial agreement is available
  *
@@ -85,8 +86,8 @@ int16_t RB02_AdvancedAttitude_MoveItems(lv_obj_t *item, int16_t degree, int16_t 
     int16_t x = (cos * 150) / 100;
     int16_t y = (sin * 230) / 100;
 
-    lv_obj_align(item, LV_ALIGN_CENTER, x+displacementX, y+displacementY);
-    return y+displacementY;
+    lv_obj_align(item, LV_ALIGN_CENTER, x + displacementX, y + displacementY);
+    return y + displacementY;
 }
 
 int16_t RB02_AdvancedAttitude_ProgressBoth(RB02_AdvancedAttitude_Status *aaStatus, int32_t value, int32_t start, int32_t end)
@@ -138,37 +139,37 @@ void RB02_AdvancedAttitude_Tick(RB02_AdvancedAttitude_Status *aaStatus, gps_t *g
     if (aaStatus->Altimeter != AltimeterInFeet)
     {
         aaStatus->Altimeter = AltimeterInFeet;
-        if(AltimeterInFeet>100 || AltimeterInFeet<-100)
+        if (AltimeterInFeet > 100 || AltimeterInFeet < -100)
         {
-        snprintf(buf, sizeof(buf), "%02d", abs(AltimeterInFeet%100));
-        lv_label_set_text(aaStatus->lv_altimeterF, buf);
-        snprintf(buf, sizeof(buf), "%d", AltimeterInFeet/100);
-        lv_label_set_text(aaStatus->lv_altimeterM, buf);
+            snprintf(buf, sizeof(buf), "%02d", abs(AltimeterInFeet % 100));
+            lv_label_set_text(aaStatus->lv_altimeterF, buf);
+            snprintf(buf, sizeof(buf), "%d", AltimeterInFeet / 100);
+            lv_label_set_text(aaStatus->lv_altimeterM, buf);
         }
         else
         {
-        snprintf(buf, sizeof(buf), "%d", AltimeterInFeet);
-        lv_label_set_text(aaStatus->lv_altimeterF, buf);
-        lv_label_set_text(aaStatus->lv_altimeterM, "");
+            snprintf(buf, sizeof(buf), "%d", AltimeterInFeet);
+            lv_label_set_text(aaStatus->lv_altimeterF, buf);
+            lv_label_set_text(aaStatus->lv_altimeterM, "");
         }
 
         // 1.1.24 Auto Scale Height
-        if(aaStatus->advancedAttitudeMaxHeigh100*100<AltimeterInFeet)
+        if (aaStatus->advancedAttitudeMaxHeigh100 * 100 < AltimeterInFeet)
         {
-            aaStatus->advancedAttitudeMaxHeigh100=AltimeterInFeet/100;
+            aaStatus->advancedAttitudeMaxHeigh100 = AltimeterInFeet / 100;
         }
 
-        int16_t degreeAltimeterInFeet = RB_AAT_START_RIGHT_ARC - RB02_AdvancedAttitude_ProgressBoth(aaStatus, AltimeterInFeet, 0, aaStatus->advancedAttitudeMaxHeigh100*100);
-        int16_t lineY=SCREEN_HEIGHT/2+RB02_AdvancedAttitude_MoveItems(aaStatus->lv_altimeterF, degreeAltimeterInFeet,46,0);
-        RB02_AdvancedAttitude_MoveItems(aaStatus->lv_altimeterM, degreeAltimeterInFeet,-42,0);
-        RB02_AdvancedAttitude_MoveItems(aaStatus->lv_altimeter_background, degreeAltimeterInFeet,0,0);
-        RB02_AdvancedAttitude_MoveItems(aaStatus->lv_altimeter_unit, degreeAltimeterInFeet,0,-34);
-        RB02_AdvancedAttitude_MoveItems(aaStatus->lv_variometer, degreeAltimeterInFeet,0,+36);
+        int16_t degreeAltimeterInFeet = RB_AAT_START_RIGHT_ARC - RB02_AdvancedAttitude_ProgressBoth(aaStatus, AltimeterInFeet, 0, aaStatus->advancedAttitudeMaxHeigh100 * 100);
+        int16_t lineY = SCREEN_HEIGHT / 2 + RB02_AdvancedAttitude_MoveItems(aaStatus->lv_altimeterF, degreeAltimeterInFeet, 46, 0);
+        RB02_AdvancedAttitude_MoveItems(aaStatus->lv_altimeterM, degreeAltimeterInFeet, -42, 0);
+        RB02_AdvancedAttitude_MoveItems(aaStatus->lv_altimeter_background, degreeAltimeterInFeet, 0, 0);
+        RB02_AdvancedAttitude_MoveItems(aaStatus->lv_altimeter_unit, degreeAltimeterInFeet, 0, -34);
+        RB02_AdvancedAttitude_MoveItems(aaStatus->lv_variometer, degreeAltimeterInFeet, 0, +36);
 
         for (int position = 0; position < RB_AAT_ARC_NUMBERS; position++)
         {
-            lv_coord_t y=lv_obj_get_y(aaStatus->lv_right_arcs[position]);
-            if (lineY-32<y)
+            lv_coord_t y = lv_obj_get_y(aaStatus->lv_right_arcs[position]);
+            if (lineY - 32 < y)
             {
                 lv_obj_clear_flag(aaStatus->lv_right_arcs[position], LV_OBJ_FLAG_HIDDEN);
             }
@@ -176,7 +177,6 @@ void RB02_AdvancedAttitude_Tick(RB02_AdvancedAttitude_Status *aaStatus, gps_t *g
             {
                 lv_obj_add_flag(aaStatus->lv_right_arcs[position], LV_OBJ_FLAG_HIDDEN);
             }
-        
         }
     }
 
@@ -194,11 +194,10 @@ void RB02_AdvancedAttitude_Tick(RB02_AdvancedAttitude_Status *aaStatus, gps_t *g
         lv_label_set_text(aaStatus->lv_speed, buf);
 
         int16_t degreeSpeed = RB_AAT_START_LEFT_ARC + RB02_AdvancedAttitude_ProgressBoth(aaStatus, gpsStatus->speed, speedKtStart, speedKtEnd);
-        RB02_AdvancedAttitude_MoveItems(aaStatus->lv_speed, degreeSpeed,0,0);
-        RB02_AdvancedAttitude_MoveItems(aaStatus->lv_speed_background, degreeSpeed,0,0);
-        RB02_AdvancedAttitude_MoveItems(aaStatus->lv_speed_unit, degreeSpeed,0,-34);
-        RB02_AdvancedAttitude_MoveItems(aaStatus->lv_gmeter, degreeSpeed,0,+36);
-
+        RB02_AdvancedAttitude_MoveItems(aaStatus->lv_speed, degreeSpeed, 0, 0);
+        RB02_AdvancedAttitude_MoveItems(aaStatus->lv_speed_background, degreeSpeed, 0, 0);
+        RB02_AdvancedAttitude_MoveItems(aaStatus->lv_speed_unit, degreeSpeed, 0, -34);
+        RB02_AdvancedAttitude_MoveItems(aaStatus->lv_gmeter, degreeSpeed, 0, +36);
     }
 
     if (aaStatus->Variometer != Variometer)
@@ -231,9 +230,9 @@ void RB02_AdvancedAttitude_Tick(RB02_AdvancedAttitude_Status *aaStatus, gps_t *g
             {
                 lv_obj_add_flag(aaStatus->lv_right_arcs2[position], LV_OBJ_FLAG_HIDDEN);
             }
-            for (int position = RB_AAT_ARC_NUMBERS / 2; position >=0; position--)
+            for (int position = RB_AAT_ARC_NUMBERS / 2; position >= 0; position--)
             {
-                if (-1*(Variometer / 100) > (RB_AAT_ARC_NUMBERS / 2-position))
+                if (-1 * (Variometer / 100) > (RB_AAT_ARC_NUMBERS / 2 - position))
                 {
                     lv_obj_clear_flag(aaStatus->lv_right_arcs2[position], LV_OBJ_FLAG_HIDDEN);
                 }
@@ -274,13 +273,12 @@ void RB02_AdvancedAttitude_Tick(RB02_AdvancedAttitude_Status *aaStatus, gps_t *g
         if (AttitudeYawDegreePerSecond > 0)
         {
             lv_obj_set_size(aaStatus->lv_gyro_pink, (AttitudeYawDegreePerSecond * 10), 16);
-            lv_obj_align(aaStatus->lv_gyro_pink, LV_ALIGN_CENTER, -(AttitudeYawDegreePerSecond * 10 / 2), 165);
         }
         else
         {
             lv_obj_set_size(aaStatus->lv_gyro_pink, (-AttitudeYawDegreePerSecond * 10), 16);
-            lv_obj_align(aaStatus->lv_gyro_pink, LV_ALIGN_CENTER, -(AttitudeYawDegreePerSecond * 10 / 2), 165);
         }
+        lv_obj_align(aaStatus->lv_gyro_pink, LV_ALIGN_CENTER, -(AttitudeYawDegreePerSecond * 10 / 2), 165);
         lv_label_set_text(aaStatus->lv_gyro, buf);
     }
 
@@ -388,7 +386,7 @@ lv_obj_t *RB02_AdvancedAttitude_CreateScreen(RB02_AdvancedAttitude_Status *aaSta
     aaStatus->AttitudeRoll = 1;
     aaStatus->Speed = 1;
     aaStatus->Track = 1;
-    aaStatus->advancedAttitudeMaxHeigh100 = 3500/100;
+    aaStatus->advancedAttitudeMaxHeigh100 = 3500 / 100;
 
     if (aaStatus->lv_parent != NULL)
     {
