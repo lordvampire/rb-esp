@@ -4,7 +4,7 @@
  * This file is part of RB.
  *
  * Copyright (C) 2024 XIAPROJECTS SRL
- * 
+ *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as published
  * by the Free Software Foundation, version 3.
@@ -22,7 +22,7 @@
  * 02 -> Display with SixPack
  * 03 -> Display with Autopilot, ADSB, Radio, Flight Computer
  * 04 -> Display with EMS: Engine monitoring system
- * 
+ *
  * Community edition will be free for all builders and personal use as defined by the licensing model
  * Dual licensing for commercial agreement is available
  *
@@ -34,6 +34,7 @@
 #include "RB02_NMEA.h"
 
 #define RB_AAT_ARC_NUMBERS 15
+#define RB_AAT_SKY_TILES 10
 
 typedef struct
 {
@@ -68,11 +69,14 @@ typedef struct
     int16_t Speed;
     int16_t Track;
     uint8_t advancedAttitudeMaxHeigh100;
+    int8_t *SkyMatrix;
+    lv_obj_t *Lines;
+    lv_obj_t *AttitudeLine;
+    lv_obj_t *SkyTiles[RB_AAT_SKY_TILES * RB_AAT_SKY_TILES];
 } RB02_AdvancedAttitude_Status;
-
 
 extern RB02_AdvancedAttitude_Status advancedAttitude_Status;
 
-lv_obj_t *RB02_AdvancedAttitude_CreateScreen(RB02_AdvancedAttitude_Status *aaStatus, const lv_img_dsc_t *AircraftIndicatorMiddle, const lv_img_dsc_t *AircraftIndicatorTop);
-void RB02_AdvancedAttitude_Tick(RB02_AdvancedAttitude_Status *aaStatus, gps_t *gpsStatus,int32_t Altimeter,int32_t QNH,int32_t Variometer);
+lv_obj_t *RB02_AdvancedAttitude_CreateScreen(RB02_AdvancedAttitude_Status *aaStatus);
+void RB02_AdvancedAttitude_Tick(RB02_AdvancedAttitude_Status *aaStatus, gps_t *gpsStatus, int32_t Altimeter, int32_t QNH, int32_t Variometer);
 #endif
