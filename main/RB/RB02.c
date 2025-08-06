@@ -712,15 +712,11 @@ void RB02_Example1(void)
   // esp_deep_sleep_enable_gpio_wakeup(16,ESP_GPIO_WAKEUP_GPIO_HIGH); Not in the Default SDK
   // esp_deep_sleep_try_to_start(); // Works on WS2.8 but I2C and External ports are still powered by pattery line
 
-  // 1.1.6
-  OperativeWarning = lv_img_create(lv_scr_act());
-  lv_obj_add_flag(OperativeWarning, LV_OBJ_FLAG_HIDDEN);
-  lv_img_set_src(OperativeWarning, &InopWarning);
-  lv_obj_set_size(OperativeWarning, InopWarning.header.w, InopWarning.header.h);
-  lv_obj_align(OperativeWarning, LV_ALIGN_CENTER, 0, 200);
-  lv_obj_set_scrollbar_mode(OperativeWarning, LV_SCROLLBAR_MODE_OFF);
-
   disableTVScroll();
+
+#ifdef RB_ENABLE_CONSOLE
+  RB02_Console_AppendLog(RB02_LOG_MAIN, RB02_LOG_INFO, "Workflow start");
+#endif
 }
 
 void disableTVScroll()
@@ -1341,33 +1337,24 @@ void nvsStoreSpeedArc()
   }
   else
   {
-    printf("Writing isKmh to NVS ...\n");
     err = nvs_set_u8(my_handle, "isKmh", isKmh);
-    printf((err != ESP_OK) ? "Failed to update isKmh!\n" : "Done\n");
-    printf("Writing degreeStart to NVS ...\n");
+
     err = nvs_set_u16(my_handle, "degreeStart", degreeStart);
-    printf((err != ESP_OK) ? "Failed to update degreeStart!\n" : "Done\n");
-    printf("Writing degreeEnd to NVS ...\n");
+
     err = nvs_set_u16(my_handle, "degreeEnd", degreeEnd);
-    printf((err != ESP_OK) ? "Failed to update degreeEnd!\n" : "Done\n");
-    printf("Writing speedKtStart to NVS ...\n");
+
     err = nvs_set_u16(my_handle, "speedKtStart", speedKtStart);
-    printf((err != ESP_OK) ? "Failed to update speedKtStart!\n" : "Done\n");
-    printf("Writing speedKtEnd to NVS ...\n");
+
     err = nvs_set_u16(my_handle, "speedKtEnd", speedKtEnd);
-    printf((err != ESP_OK) ? "Failed to update speedKtEnd!\n" : "Done\n");
-    printf("Writing speedWhite to NVS ...\n");
+
     err = nvs_set_u16(my_handle, "speedWhite", speedWhite);
-    printf((err != ESP_OK) ? "Failed to update speedWhite!\n" : "Done\n");
-    printf("Writing speedGreen to NVS ...\n");
+
     err = nvs_set_u16(my_handle, "speedGreen", speedGreen);
-    printf((err != ESP_OK) ? "Failed to update speedGreen!\n" : "Done\n");
-    printf("Writing speedYellow to NVS ...\n");
+
     err = nvs_set_u16(my_handle, "speedYellow", speedYellow);
-    printf((err != ESP_OK) ? "Failed to update speedYellow!\n" : "Done\n");
-    printf("Writing speedRed to NVS ...\n");
+
     err = nvs_set_u16(my_handle, "speedRed", speedRed);
-    printf((err != ESP_OK) ? "Failed to update speedRed!\n" : "Done\n");
+
     nvs_close(my_handle);
   }
 }
