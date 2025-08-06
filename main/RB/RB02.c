@@ -1964,6 +1964,18 @@ void rb_check_attitude_inop()
 
 void RB02_CreateScreens()
 {
+  // 1.1.6
+  OperativeWarning = lv_img_create(lv_scr_act());
+  lv_obj_add_flag(OperativeWarning, LV_OBJ_FLAG_HIDDEN);
+  lv_img_set_src(OperativeWarning, &InopWarning);
+  lv_obj_set_size(OperativeWarning, InopWarning.header.w, InopWarning.header.h);
+  lv_obj_align(OperativeWarning, LV_ALIGN_CENTER, 0, 200);
+  lv_obj_set_scrollbar_mode(OperativeWarning, LV_SCROLLBAR_MODE_OFF);
+  lv_obj_clear_flag(OperativeWarning, LV_OBJ_FLAG_CLICKABLE);
+#ifdef DISABLED
+  RB02_Navigator_CreateScreen(singletonConfig(), lv_scr_act());
+#endif
+
 #ifdef ENABLE_VENDOR
   if (VendorSplashScreenImage == NULL)
   {
@@ -2982,7 +2994,7 @@ static void speedBgClicked(lv_event_t *event)
 
   if (changedTab == true)
   {
-    lv_tabview_set_act(tv, cur, LV_ANIM_ON);
+    lv_tabview_set_act(tv, cur, LV_ANIM_OFF);
   }
   if (DeviceIsDemoMode == 0 && changedTab)
   {
@@ -3377,6 +3389,8 @@ static void Onboard_create_Setup(lv_obj_t *parent)
     lv_obj_center(label);
     lineY += 60;
   }
+
+  RB02_Setup_CreateScreen(singletonConfig(), parent, &lineY);
 
   if (true)
   {
