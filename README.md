@@ -1,8 +1,13 @@
 # RB-02
 The RB is the Open-source Aviation instruments suite, the models are divided by CPU/Features. RB-02 will run in ESP32 (Arduino).
+- RB-01 -> Display with Synthetic vision, Autopilot and ADSB
+- RB-02 -> Display with SixPack (this repo)
+- RB-03 -> Display with Autopilot, ADSB, Radio, Flight Computer
+- RB-04 -> Display with EMS: Engine monitoring system
+- RB-05 -> Display with Stratux BLE Traffic (this repo)
 
 ## How to
-You can built it yourself by following this procedure:
+We strongly suggest to install binaries, but if you are trainged, you can built it yourself by following this procedure:
 1) Download the ESP32-S3-Touch-LCD-2.8C-Demo.zip https://files.waveshare.com/wiki/ESP32-S3-Touch-LCD-2.8C/ESP32-S3-Touch-LCD-2.8C-Demo.zip
 2) Overwrite the GIT files
 3) Compile following the official Wiki: https://www.waveshare.com/wiki/ESP32-S3-Touch-LCD-2.8C
@@ -17,12 +22,15 @@ You can built it yourself by following this procedure:
 7. Altimeter digital with GPS Altimeter comparation
 8. Slip & Turn with degree indicator
 9. Gyro based on Gyroscope assisted with GPS Track
-10. GPS Map based on BMP Tiles, you can load your map in the SDCard
+10. GPS Map based on BMP Tiles, you can load your map MapBox in the SDCard
 11. Variometer
 12. G-Meter with Max-Negative stored
 13. Timers: up to 3 timers with GPS UTC Clock
 14. Checklist loaded from SDCard
 15. Engine Hour Lifetime Chrono
+16. Traffic Radar display from BLE Stratux
+17. Traffic List from BLE Stratux
+18. Data Logger writer to SD card
 
 
 ### Requirements
@@ -33,7 +41,7 @@ You can built it yourself by following this procedure:
 - Flashing tool: https://www.waveshare.com/wiki/Flash_Firmware_Flashing_and_Erasing
 - Case: you can find the STL on wiki
 - GPS: any TTL NMEA GPS with $GPRMC such as uBlox NEO M6N and up
-- SDCard
+- Micro SD Card up to 32Gb 
 
 ### Installation
 Please read the installation Wiki: to make it working the aircraft profile shall be correctly loaded in the setup.
@@ -43,6 +51,7 @@ We added a "vibration" correction setup: please verify with your mechanic which 
 1. Setup
 2. Vibration Setup
 3. GPS Status
+4. Bluetooth connection
 
 ### Video
 - https://www.youtube.com/watch?v=9aCub_4hdxs
@@ -60,4 +69,6 @@ We added a "vibration" correction setup: please verify with your mechanic which 
 If you have problems check Youtube guides and try a "full clear" during flash
 
 ## License
-This project is licensed under the GNU AGPLv3. See the LICENSE file for details.
+This project is licensed under DUAL license:
+1. the GNU AGPLv3. See the LICENSE file for details.
+2. commercial agreement
