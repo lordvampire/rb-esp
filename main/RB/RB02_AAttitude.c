@@ -662,7 +662,7 @@ lv_obj_t *RB02_AdvancedAttitude_CreateScreen(RB02_AdvancedAttitude_Status *aaSta
         lv_obj_set_style_text_font(label, &lv_font_montserrat_16, 0);
         lv_obj_set_style_text_color(label, lv_color_black(), 0);
 
-        lv_label_set_text(label, "GPS ASSISTED\nNOT CERTIFIED");
+        lv_label_set_text(label, "RB 02\nGPS ASSISTED\nNOT CERTIFIED");
     }
 
     for (int position = 0; position < RB_AAT_ARC_NUMBERS; position++)
@@ -790,6 +790,22 @@ lv_obj_t *RB02_AdvancedAttitude_CreateScreen(RB02_AdvancedAttitude_Status *aaSta
 
         aaStatus->lv_gyro = label;
     }
+
+    if (aaStatus->lv_parent != NULL)
+    {
+        lv_obj_t *label = lv_label_create(aaStatus->lv_parent);
+        lv_obj_set_size(label, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+        lv_obj_align(label, LV_ALIGN_CENTER, 170, 16);
+        lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
+        lv_obj_set_style_text_font(label, &lv_font_montserrat_32, 0);
+        lv_obj_set_style_text_color(label, lv_color_white(), 0);
+
+        lv_obj_set_style_border_color(label, lv_color_black(), 0);
+        lv_obj_set_style_bg_color(label, lv_color_black(), 0);
+
+        aaStatus->lv_variometer = label;
+    }
+
     if (aaStatus->lv_parent != NULL)
     {
         lv_obj_t *roundTile = lv_obj_create(aaStatus->lv_parent);
@@ -902,20 +918,6 @@ lv_obj_t *RB02_AdvancedAttitude_CreateScreen(RB02_AdvancedAttitude_Status *aaSta
         aaStatus->lv_track = label;
     }
 
-    if (aaStatus->lv_parent != NULL)
-    {
-        lv_obj_t *label = lv_label_create(aaStatus->lv_parent);
-        lv_obj_set_size(label, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
-        lv_obj_align(label, LV_ALIGN_CENTER, 170, 16);
-        lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
-        lv_obj_set_style_text_font(label, &lv_font_montserrat_32, 0);
-        lv_obj_set_style_text_color(label, lv_color_white(), 0);
-
-        lv_obj_set_style_border_color(label, lv_color_black(), 0);
-        lv_obj_set_style_bg_color(label, lv_color_black(), 0);
-
-        aaStatus->lv_variometer = label;
-    }
     /*
 
     if (aaStatus->lv_parent != NULL && false)

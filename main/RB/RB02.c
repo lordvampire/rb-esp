@@ -84,7 +84,6 @@
 #include "RB02_Console.h"
 #endif
 
-
 #ifdef RB_ENABLE_GPS_DIAG
 #include "RB02_GPSDiag.h"
 #endif
@@ -879,10 +878,10 @@ void nmea_RMC_UpdatedValueFor(uint8_t csvCounter, int32_t finalNumber, uint8_t d
   case 1: // UTC hhmmss.ss
     if (finalNumber != 0)
     {
-    singletonConfig()->NMEA_DATA.tim.thousand = finalNumber % 100;
-    singletonConfig()->NMEA_DATA.tim.second = (finalNumber / 100) % 100;
-    singletonConfig()->NMEA_DATA.tim.minute = (finalNumber / 10000) % 100;
-    singletonConfig()->NMEA_DATA.tim.hour = (finalNumber / 1000000);
+      singletonConfig()->NMEA_DATA.tim.thousand = finalNumber % 100;
+      singletonConfig()->NMEA_DATA.tim.second = (finalNumber / 100) % 100;
+      singletonConfig()->NMEA_DATA.tim.minute = (finalNumber / 10000) % 100;
+      singletonConfig()->NMEA_DATA.tim.hour = (finalNumber / 1000000);
     }
     /* code */
     break;
@@ -1188,7 +1187,6 @@ void NMEA_ParseBuffer(uint8_t *data, const int rxBytes, uint8_t SourceId)
     lv_label_set_text(GPSDiag_NMEADebugSummary, (char *)(data));
   }
 #endif
-  free(data);
 }
 #endif
 void nvsRestoreGMeter()
@@ -1285,7 +1283,7 @@ void nvsRestoreGMeter()
     if (defaultPageOrDemo == 0xff)
     {
       // Since we support non touch single instrument we will never start as demo
-      //DeviceIsDemoMode = 1;
+      // DeviceIsDemoMode = 1;
     }
     else
     {
@@ -1373,8 +1371,8 @@ void nvsRestoreGMeter()
     singletonConfig()->settingsBluetoothEnabled = settingsBluetoothEnabled;
 
     nvs_get_u8(my_handle, NVS_KEY_BT_GPS, &settingsBluetoothEnabled);
-    singletonConfig()->settingsBluetoothGPS= settingsBluetoothEnabled;
-    
+    singletonConfig()->settingsBluetoothGPS = settingsBluetoothEnabled;
+
 #endif
     nvs_close(my_handle);
   }
@@ -1425,9 +1423,7 @@ void nvsStoreUARTBaudrate()
   else
   {
     // Read
-    printf("Writing UART from NVS ...\n");
     err = nvs_set_i32(my_handle, "uart", GpsSpeed0ForDisable);
-    printf((err != ESP_OK) ? "Failed to update GpsSpeed0ForDisable!\n" : "Done\n");
     nvs_close(my_handle);
   }
 }
@@ -1503,9 +1499,7 @@ void nvsStorePCal()
   else
   {
     // Read
-    printf("Writing pcal from NVS ...\n");
     err = nvs_set_i32(my_handle, "pcal", singletonConfig()->bmp280override);
-    printf((err != ESP_OK) ? "Failed to update bmp280override!\n" : "Done\n");
     // 1.1.26
     nvs_set_u8(my_handle, "autoQNH", singletonConfig()->settingsAutoQNH);
     nvs_close(my_handle);
@@ -1524,11 +1518,8 @@ void nvsStoreGMeter()
   else
   {
     // Read
-    printf("Writing GMeter from NVS ...\n");
     err = nvs_set_i8(my_handle, "gmeter_max", 10.0 * GFactorMax);
-    printf((err != ESP_OK) ? "Failed to update GMeterMax!\n" : "Done\n");
     err = nvs_set_i8(my_handle, "gmeter_min", 10.0 * GFactorMin);
-    printf((err != ESP_OK) ? "Failed to update GMeterMin!\n" : "Done\n");
 
     nvs_close(my_handle);
   }
@@ -1546,7 +1537,6 @@ void nvsStoreDefaultScreenOrDemo()
   else
   {
     // Read
-    printf("Writing Default Screen from NVS ...\n");
     uint8_t value = 0xff;
 
     if (DeviceIsDemoMode == 1)
@@ -1559,7 +1549,6 @@ void nvsStoreDefaultScreenOrDemo()
     }
 
     err = nvs_set_u8(my_handle, "default", value);
-    printf((err != ESP_OK) ? "Failed to update default!\n" : "Done\n");
     nvs_close(my_handle);
   }
 }
@@ -1874,9 +1863,9 @@ void update_Speed_lvgl_tick(lv_timer_t *t)
 
     char buf[15];
     float fspeed = 0;
-  #ifdef RB_ENABLE_GPS
+#ifdef RB_ENABLE_GPS
     fspeed = singletonConfig()->NMEA_DATA.speed;
-  #endif
+#endif
     snprintf(buf, sizeof(buf), "%.0f", fspeed / isKt); // KT
     lv_label_set_text(Screen_Speed_SpeedText, buf);
   }
@@ -2059,7 +2048,7 @@ void RB02_CreateScreens()
 #endif
 #ifdef RB_ENABLE_AAT
 
-  RB02_AdvancedAttitude_CreateScreen(&advancedAttitude_Status, &att_aircraft, &att_tri);
+  RB02_AdvancedAttitude_CreateScreen(&advancedAttitude_Status);
   lv_obj_add_event_cb(advancedAttitude_Status.lv_parent, speedBgClicked, LV_EVENT_CLICKED, NULL);
 #endif
 
@@ -2658,7 +2647,7 @@ void rb_increase_lvgl_tick(lv_timer_t *t)
     lv_label_set_text(SettingsEngineTimeLabel, buf);
     int opBt = 0;
 #ifdef RB02_ESP_BLUETOOTH
-      opBt = singletonConfig()->Operative_Bluetooth;
+    opBt = singletonConfig()->Operative_Bluetooth;
 #endif
     snprintf(buf, sizeof(buf), "Operative BMP:%d GPS:%d ATT:%d BT:%d", Operative_BMP280, Operative_GPS, Operative_Attitude, opBt);
     lv_label_set_text(singletonConfig()->ui.SettingsOperativeSummary, buf);
@@ -2668,7 +2657,6 @@ void rb_increase_lvgl_tick(lv_timer_t *t)
 #endif
   }
   break;
-
   }
 }
 
@@ -2751,14 +2739,14 @@ static void mbox1_cage_event_cb(lv_event_t *e)
     const char *txt = lv_msgbox_get_active_btn_text(msgbox);
     if (txt)
     {
-      #ifdef RB_ENABLE_GPS
+#ifdef RB_ENABLE_GPS
       if (strcmp("QNH", txt) == 0)
       {
         QNH = RB02_SuggestedQNH(singletonConfig()->NMEA_DATA.altitude, bmp280Pressure);
         RB02_AltimeterQNHUpdated();
         singletonConfig()->settingsAutoQNH = 1;
       }
-      #endif
+#endif
       if (strcmp("CAGE", txt) == 0)
       {
         // TODO: make an avg
@@ -2964,7 +2952,6 @@ static void actionInTab(touchLocation location)
     default:
       break;
     }
-
     RB02_AltimeterQNHUpdated();
     break;
 #ifdef RB_ENABLE_CLK
@@ -5221,7 +5208,6 @@ static void Onboard_create_GMeter(lv_obj_t *parent)
   lv_obj_add_style(GMeterLabelMax, &style_title, LV_STATE_DEFAULT);
 }
 #endif
-
 
 void turnOnOffDigitsSymbols(lv_obj_t **segments, uint8_t symbol)
 {
