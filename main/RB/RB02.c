@@ -125,6 +125,8 @@
 #endif
 #endif
 
+#include "RB02_Navigator.h"
+
 // External dependencies
 #include "nvs_flash.h"
 #include "esp_mac.h"
@@ -474,11 +476,11 @@ void ApplyCoding(void)
 {
   // 1.1.23 Removing Default Demo Version
 #ifdef RB_02_DISPLAY_TOUCH
-  DeviceIsDemoMode = 1;
-  StartupPage = 0;
+  DeviceIsDemoMode = 0;
+  StartupPage = 1;
 #else
   DeviceIsDemoMode = 0;
-  StartupPage = RB02_TAB_SET-1;
+  StartupPage = RB02_TAB_SET - 1;
 #endif
 }
 
@@ -1282,7 +1284,8 @@ void nvsRestoreGMeter()
 
     if (defaultPageOrDemo == 0xff)
     {
-      DeviceIsDemoMode = 1;
+      // Since we support non touch single instrument we will never start as demo
+      //DeviceIsDemoMode = 1;
     }
     else
     {
@@ -2202,11 +2205,21 @@ void rb_increase_lvgl_tick(lv_timer_t *t)
         lv_dropdown_set_selected(uartDropDown, 5);
         break;
       }
+
+#ifdef RB_ENABLE_CONSOLE
+      char ConsoleLogBuffer[10];
+      snprintf(ConsoleLogBuffer, sizeof(ConsoleLogBuffer), "UART %ld", GpsSpeed0ForDisable);
+      RB02_Console_AppendLog(RB02_LOG_MAIN, RB02_LOG_INFO, ConsoleLogBuffer);
+#endif
 #else
       GpsSpeed0ForDisable = 0;
 #endif
       break;
     case 100:
+
+#ifdef RB_ENABLE_CONSOLE
+      RB02_Console_AppendLog(RB02_LOG_MAIN, RB02_LOG_INFO, "Workflow completed");
+#endif
 
       datetimeTimer1 = datetime;
       datetimeTimer2 = datetime;
@@ -2818,9 +2831,11 @@ static void RB02_AltimeterQNHUpdated()
 #endif
   // 1.1.2 added mmHg conversion
   snprintf(buf, sizeof(buf), "QNH: %u %.02f", QNH, ((float)QNH) / 33.8639);
+#ifdef RB_ENABLE_ALD
   lv_label_set_text(Screen_Altitude_QNH2, buf);
   snprintf(buf, sizeof(buf), "%+ld", Variometer);
   lv_label_set_text(Screen_Altitude_Variometer2, buf);
+#endif
   example1_BMP280_lvgl_tick(NULL);
   // [ISSUE] with variometer on digital altimeter page #2
   Variometer = 0;
