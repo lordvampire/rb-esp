@@ -79,10 +79,13 @@
 #include "RB02_Gyro.h"
 #endif
 
-#ifdef RB_ENABLE_GPS
+#ifdef RB_ENABLE_CONSOLE
+#include "RB02_Console.h"
+#endif
+
+
 #ifdef RB_ENABLE_GPS_DIAG
 #include "RB02_GPSDiag.h"
-#endif
 #endif
 
 #ifdef RB_ENABLE_CHECKLIST
@@ -305,6 +308,7 @@ typedef enum
 #endif
 #ifdef RB_ENABLE_TRAFFIC
   RB02_TAB_RDR,
+  RB02_TAB_TRA,
 #endif
   RB02_TAB_SET,
 #ifdef VIBRATION_TEST
@@ -312,6 +316,9 @@ typedef enum
 #endif
 #ifdef RB_ENABLE_GPS_DIAG
   RB02_TAB_GDG,
+#endif
+#ifdef RB_ENABLE_CONSOLE
+  RB02_TAB_COS,
 #endif
   RB02_TAB_DEV
 } tabs;
@@ -571,7 +578,8 @@ void RB02_Example1(void)
 #endif
 
 #ifdef RB_ENABLE_TRAFFIC
-  singletonConfig()->trafficStatus.lv_parent = lv_tabview_add_tab(tv, "Radar");
+  singletonConfig()->trafficStatus.lv_parent_radar = lv_tabview_add_tab(tv, "Radar");
+  singletonConfig()->trafficStatus.lv_parent = lv_tabview_add_tab(tv, "Traffic");
 #endif
   lv_obj_t *t9 = lv_tabview_add_tab(tv, "Setup");
 #ifdef VIBRATION_TEST
@@ -582,6 +590,11 @@ void RB02_Example1(void)
 #ifdef RB_ENABLE_GPS_DIAG
   lv_obj_t *tGPSDiag = lv_tabview_add_tab(tv, "GPS Diag");
   lv_obj_add_event_cb(tGPSDiag, speedBgClicked, LV_EVENT_CLICKED, NULL);
+#endif
+
+#ifdef RB_ENABLE_CONSOLE
+  lv_obj_t *tConsole = lv_tabview_add_tab(tv, "GPS Diag");
+  lv_obj_add_event_cb(tConsole, speedBgClicked, LV_EVENT_CLICKED, NULL);
 #endif
 
 // lv_obj_t *t10 = lv_tabview_add_tab(tv, "Demo");
@@ -659,6 +672,10 @@ void RB02_Example1(void)
 
 #ifdef RB_ENABLE_GPS_DIAG
   RB02_GPSDiag_CreateScreen(tGPSDiag);
+#endif
+
+#ifdef RB_ENABLE_CONSOLE
+  RB02_Console_CreateScreen(tConsole);
 #endif
 
   // Onboard_create(t10);
@@ -1321,6 +1338,16 @@ void nvsRestoreGMeter()
     singletonConfig()->NMEA_DATA.latitude = i32buffer / 100.0;
     nvs_get_i32(my_handle, "longitude100", &i32buffer);
     singletonConfig()->NMEA_DATA.longitude = i32buffer / 100.0;
+#endif
+
+#ifdef RB02_ESP_BLUETOOTH
+    uint8_t settingsBluetoothEnabled = 0;
+    nvs_get_u8(my_handle, NVS_KEY_BT_ENABLE, &settingsBluetoothEnabled);
+    singletonConfig()->settingsBluetoothEnabled = settingsBluetoothEnabled;
+
+    nvs_get_u8(my_handle, NVS_KEY_BT_GPS, &settingsBluetoothEnabled);
+    singletonConfig()->settingsBluetoothGPS= settingsBluetoothEnabled;
+    
 #endif
     nvs_close(my_handle);
   }
@@ -2010,7 +2037,9 @@ void RB02_CreateScreens()
 #endif
 
 #ifdef RB_ENABLE_TRAFFIC
-  RB02_Traffic_CreateScreen(&(singletonConfig()->trafficStatus));
+  RB05_Radar_CreateScreen(&(singletonConfig()->trafficStatus));
+  lv_obj_add_event_cb(singletonConfig()->trafficStatus.lv_parent_radar, speedBgClicked, LV_EVENT_CLICKED, NULL);
+  RB05_Traffic_CreateScreen(&(singletonConfig()->trafficStatus));
   lv_obj_add_event_cb(singletonConfig()->trafficStatus.lv_parent, speedBgClicked, LV_EVENT_CLICKED, NULL);
 #endif
 #ifdef RB_ENABLE_TRK
@@ -2231,7 +2260,42 @@ void rb_increase_lvgl_tick(lv_timer_t *t)
 
 #ifdef RB_ENABLE_TRAFFIC
   case RB02_TAB_RDR:
-    RB02_Traffic_Tick(&(singletonConfig()->trafficStatus));
+    RB05_Radar_Tick(&(singletonConfig()->trafficStatus));
+    if (singletonConfig()->Operative_Bluetooth && OperativeWarningVisible == true)
+    {
+      lv_obj_add_flag(OperativeWarning, LV_OBJ_FLAG_HIDDEN);
+      OperativeWarningVisible = false;
+    }
+    else
+    {
+      if (singletonConfig()->Operative_Bluetooth == 0 && OperativeWarningVisible == false)
+      {
+        lv_obj_clear_flag(OperativeWarning, LV_OBJ_FLAG_HIDDEN);
+        OperativeWarningVisible = true;
+      }
+      else
+      {
+      }
+    }
+    break;
+  case RB02_TAB_TRA:
+    RB05_Traffic_Tick(&(singletonConfig()->trafficStatus));
+    if (singletonConfig()->Operative_Bluetooth && OperativeWarningVisible == true)
+    {
+      lv_obj_add_flag(OperativeWarning, LV_OBJ_FLAG_HIDDEN);
+      OperativeWarningVisible = false;
+    }
+    else
+    {
+      if (singletonConfig()->Operative_Bluetooth == 0 && OperativeWarningVisible == false)
+      {
+        lv_obj_clear_flag(OperativeWarning, LV_OBJ_FLAG_HIDDEN);
+        OperativeWarningVisible = true;
+      }
+      else
+      {
+      }
+    }
     break;
 #endif
 
@@ -2542,6 +2606,12 @@ void rb_increase_lvgl_tick(lv_timer_t *t)
     // 1.1.17
     snprintf(buf, sizeof(buf), "Engine MDHms: %02d/%02d %02d:%02d:%02d", datetime.month, datetime.day, datetime.hour, datetime.minute, datetime.second);
     lv_label_set_text(SettingsEngineTimeLabel, buf);
+    int opBt = 0;
+#ifdef RB02_ESP_BLUETOOTH
+      opBt = singletonConfig()->Operative_Bluetooth;
+#endif
+    snprintf(buf, sizeof(buf), "Operative BMP:%d GPS:%d ATT:%d BT:%d", Operative_BMP280, Operative_GPS, Operative_Attitude, opBt);
+    lv_label_set_text(singletonConfig()->ui.SettingsOperativeSummary, buf);
 
 #ifdef RB_ENABLE_GPS
     uart_fetch_data();
