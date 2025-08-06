@@ -67,6 +67,7 @@
 #include "RB02Images.c"
 
 #include "RB02_Altimeter.h"
+#include "RB02_Setup.h"
 
 // 1.1.19 GPS MAP
 #include "RB02_NMEA.h"
@@ -874,10 +875,13 @@ void nmea_RMC_UpdatedValueFor(uint8_t csvCounter, int32_t finalNumber, uint8_t d
     /* code */
     break;
   case 1: // UTC hhmmss.ss
+    if (finalNumber != 0)
+    {
     singletonConfig()->NMEA_DATA.tim.thousand = finalNumber % 100;
     singletonConfig()->NMEA_DATA.tim.second = (finalNumber / 100) % 100;
     singletonConfig()->NMEA_DATA.tim.minute = (finalNumber / 10000) % 100;
     singletonConfig()->NMEA_DATA.tim.hour = (finalNumber / 1000000);
+    }
     /* code */
     break;
   case 2: // A
@@ -1077,12 +1081,32 @@ bool nmea_GGA_mini_parser(const uint8_t *sentence, uint16_t length)
 #endif
 
 #ifdef RB_ENABLE_GPS
+void NMEA_ParseBuffer(uint8_t *data, const int rxBytes, uint8_t SourceId);
 void uart_fetch_data()
 {
   if (GpsSpeed0ForDisable == 0)
     return;
   uint8_t *data = (uint8_t *)malloc(RX_BUF_SIZE + 1);
   const int rxBytes = uart_read_bytes(UART_N, data, RX_BUF_SIZE, 10 / portTICK_PERIOD_MS);
+  NMEA_ParseBuffer(data, rxBytes, RB01_GPS_PROTOCOL_UART);
+  free(data);
+}
+
+void NMEA_ParseBuffer(uint8_t *data, const int rxBytes, uint8_t SourceId)
+{
+#ifdef RB01_GPS_PROTOCOL_BLE
+  if (SourceId == RB01_GPS_PROTOCOL_BLE && singletonConfig()->settingsBluetoothGPS == 0)
+  {
+    return;
+  }
+#endif
+  /*
+  if(SourceId == RB01_GPS_PROTOCOL_UART && singletonConfig()->settingsBluetoothGPS == 1 && singletonConfig()->Operative_Bluetooth)
+  {
+    return;
+  }
+  */
+
   if (rxBytes > 0)
   {
     data[rxBytes] = 0;
@@ -2096,6 +2120,11 @@ void rb_increase_lvgl_tick(lv_timer_t *t)
     case 3:
       bmp280Setup();
       break;
+    case 4:
+#ifdef RB02_ESP_BLUETOOTH
+      esp_ble_gap_start_scanning(30); // scan for 30 seconds
+#endif
+      break;
     case 7:
       readCalibration();
       LCD_Backlight = 1;
@@ -2133,6 +2162,12 @@ void rb_increase_lvgl_tick(lv_timer_t *t)
         GyroBias.x = -(GyroBiasAcquire[0].x + GyroBiasAcquire[1].x + GyroBiasAcquire[2].x) / 3.0;
         GyroBias.y = -(GyroBiasAcquire[0].y + GyroBiasAcquire[1].y + GyroBiasAcquire[2].y) / 3.0;
         GyroBias.z = -(GyroBiasAcquire[0].z + GyroBiasAcquire[1].z + GyroBiasAcquire[2].z) / 3.0;
+
+#ifdef RB_ENABLE_CONSOLE
+        char ConsoleLogBuffer[20];
+        snprintf(ConsoleLogBuffer, sizeof(ConsoleLogBuffer), "CAL: %.1f,%.1f,%.1f", GyroBias.x, GyroBias.y, GyroBias.z);
+        RB02_Console_AppendLog(RB02_LOG_MAIN, RB02_LOG_INFO, ConsoleLogBuffer);
+#endif
       }
       rb_check_attitude_inop();
 
@@ -2537,7 +2572,9 @@ void rb_increase_lvgl_tick(lv_timer_t *t)
 #endif
 #ifdef RB_ENABLE_GPS_DIAG
   case RB02_TAB_GDG:
+#ifdef RB_ENABLE_GPS
     uart_fetch_data();
+#endif
     break;
 #endif
 
@@ -2737,7 +2774,7 @@ void lv_att_reset_msgbox(void)
   char buf[100];
   uint16_t SuggestedQNH = 1013;
 #ifdef RB_ENABLE_GPS
-  SuggestedQNH =RB02_SuggestedQNH(singletonConfig()->NMEA_DATA.altitude, bmp280Pressure);
+  SuggestedQNH = RB02_SuggestedQNH(singletonConfig()->NMEA_DATA.altitude, bmp280Pressure);
 #endif
   snprintf(buf, sizeof(buf), "Would you like to cage sensors?\nAuto QNH=%d", SuggestedQNH);
 
@@ -2776,7 +2813,9 @@ static void RB02_AltimeterQNHUpdated()
 {
   char buf[25];
   snprintf(buf, sizeof(buf), "%03u", QNH);
+#ifdef RB_ENABLE_ALT
   lv_label_set_text(Screen_Altitude_QNH, buf);
+#endif
   // 1.1.2 added mmHg conversion
   snprintf(buf, sizeof(buf), "QNH: %u %.02f", QNH, ((float)QNH) / 33.8639);
   lv_label_set_text(Screen_Altitude_QNH2, buf);
