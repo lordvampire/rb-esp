@@ -1,3 +1,32 @@
+/**
+ * This file is part of RB.
+ *
+ * Copyright (C) 2024 XIAPROJECTS SRL
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as published
+ * by the Free Software Foundation, version 3.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU Affero General Public License for more details.
+ *
+ * You should have received a copy of the GNU Affero General Public License
+ * along with this program. If not, see <https://www.gnu.org/licenses/>.
+
+ * This source is part of the project RB:
+ * 01 -> Display with Synthetic vision, Autopilot and ADSB
+ * 02 -> Display with SixPack
+ * 03 -> Display with Autopilot, ADSB, Radio, Flight Computer
+ * 04 -> Display with EMS: Engine monitoring system
+ * 05 -> Display with Stratux BLE Traffic
+ *
+ * Community edition will be free for all builders and personal use as defined by the licensing model
+ * Dual licensing for commercial agreement is available
+ *
+*/
+
 #include <stdio.h>
 #include "sdkconfig.h"
 #include "freertos/FreeRTOS.h"
@@ -28,6 +57,9 @@
 #include "nvs_flash.h"
 #include "BAT_Driver.h"
 #include "driver/uart.h"
+#ifdef RB02_ESP_BLUETOOTH
+#include "RB05_ESP_Bluetooth.h"
+#endif
 
 // 1.1.9
 uint8_t DriverLoopMilliseconds = 40;
@@ -46,7 +78,7 @@ void Driver_Loop(void *parameter)
         {
             RTC_Loop();
             // 1.1.17 Improving BMP Read, by default the loop is 20Hz and read at 1Hz
-            loopThreshold = 1000/(10+DriverLoopMilliseconds);
+            loopThreshold = 1000 / (10 + DriverLoopMilliseconds);
             // When sensor is ready (After Calibration)
             if (workflow > 100)
             {
@@ -55,10 +87,13 @@ void Driver_Loop(void *parameter)
             }
         }
         loopThreshold--;
-        vTaskDelay(pdMS_TO_TICKS(10+DriverLoopMilliseconds));
+        vTaskDelay(pdMS_TO_TICKS(10 + DriverLoopMilliseconds));
     }
     vTaskDelete(NULL);
 }
+
+uint8_t RB02_Config_NVS_Get_BluetoothSettings();
+
 void Driver_Init(void)
 {
     Flash_Searching();
@@ -67,6 +102,14 @@ void Driver_Init(void)
     PCF85063_Init();
     QMI8658_Init();
     EXIO_Init(); // Example Initialize EXIO
+
+#ifdef RB02_ESP_BLUETOOTH
+    //if (RB02_Config_NVS_Get_BluetoothSettings() != 0)
+    {
+        RB02_BluetoothLowEnergy_Init();
+    }
+#endif
+
     xTaskCreatePinnedToCore(
         Driver_Loop,
         "Other Driver task",
@@ -76,6 +119,7 @@ void Driver_Init(void)
         NULL,
         0);
 }
+void RB02_Example1(void);
 void app_main(void)
 {
 
@@ -86,8 +130,6 @@ void app_main(void)
         ESP_ERROR_CHECK(nvs_flash_erase());
         ret = nvs_flash_init();
     }
-
-    // Wireless_Init();
     Driver_Init();
 
     // 1.0.9
