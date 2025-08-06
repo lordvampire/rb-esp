@@ -1752,7 +1752,7 @@ void example1_BMP280_lvgl_tick(lv_timer_t *t)
   // Altimeter is *100 feet
   int32_t AltimeterNew = (((QNH * 100) - bmp280Pressure) * 30.0);
   // 1.1.6
-  if (AltimeterNew < -10000 || AltimeterNew > 1200000)
+  if (AltimeterNew < -100000 || AltimeterNew > 1200000)
   {
     Operative_BMP280 = 0;
   }
