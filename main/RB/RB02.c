@@ -92,8 +92,14 @@
 #include "RB02_AAttitude.h"
 #endif
 
+#ifdef RB02_ESP_BLUETOOTH
+#include "esp_bt.h"
+#include "esp_gap_ble_api.h"
+#endif
+
 #ifdef RB_ENABLE_TRAFFIC
-#include "RB02_Traffic.h"
+#include "RB05_Traffic.h"
+#include "RB05_Radar.h"
 #endif
 
 // 1.1.5 Added Vendor Splashscreen
@@ -2755,14 +2761,33 @@ static void actionInTab(touchLocation location)
     break;
 #endif
 #ifdef RB_ENABLE_TRAFFIC
-  case RB02_TAB_RDR:
+  case RB02_TAB_TRA:
     switch (location)
     {
     case RB02_TOUCH_N:
-      RB02_Traffic_Touch_N(&singletonConfig()->trafficStatus);
+      RB05_Traffic_Touch_N(&singletonConfig()->trafficStatus);
       break;
     case RB02_TOUCH_S:
-      RB02_Traffic_Touch_S(&singletonConfig()->trafficStatus);
+      RB05_Traffic_Touch_S(&singletonConfig()->trafficStatus);
+      break;
+    case RB02_TOUCH_CENTER:
+      RB05_Traffic_Touch_Center(&singletonConfig()->trafficStatus);
+      break;
+    default:
+      break;
+    }
+    break;
+  case RB02_TAB_RDR:
+    switch (location)
+    {
+    case RB02_TOUCH_CENTER:
+      RB05_Radar_Touch_Center(&singletonConfig()->trafficStatus);
+      break;
+    case RB02_TOUCH_N:
+      RB05_Radar_Touch_N(&singletonConfig()->trafficStatus);
+      break;
+    case RB02_TOUCH_S:
+      RB05_Radar_Touch_S(&singletonConfig()->trafficStatus);
       break;
     default:
       break;
@@ -2779,6 +2804,13 @@ static void actionInTab(touchLocation location)
     case RB02_TOUCH_S:
       RB02_GPSMap_Touch_S(&singletonConfig()->gpsMapStatus);
       break;
+    case RB02_TOUCH_E:
+      RB02_GPSMap_Touch_E(&singletonConfig()->gpsMapStatus);
+      break;
+    case RB02_TOUCH_W:
+      RB02_GPSMap_Touch_W(&singletonConfig()->gpsMapStatus);
+      break;
+
     default:
       break;
     }
