@@ -1,0 +1,5 @@
+#define RB_02_DISPLAY_SIZE RB_02_DISPLAY_28
+
+#define RB_ENABLE_TRN 1
+
+#define RB_ENABLE_GPS 1

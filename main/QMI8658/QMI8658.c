@@ -66,7 +66,7 @@ IMUdata AccelFiltered;
 IMUdata AccelFilteredMax;
 IMUdata GyroFiltered;
 IMUdata GyroBias;
-IMUdata GyroCalibration;
+// 1.1.30 HW Calibration IMUdata GyroCalibration;
 // Adjustable parameter: lower = slower yaw correction
 #define YAW_CORRECTION_GAIN 0.01f
 
@@ -93,7 +93,7 @@ float AttitudeBalanceAlpha = 1.0 / 230.0;
 
 uint8_t Device_addr; // default for SD0/SA0 low, 0x6A if high
 acc_scale_t acc_scale = ACC_RANGE_4G;
-gyro_scale_t gyro_scale = GYR_RANGE_64DPS;
+gyro_scale_t gyro_scale = GYR_RANGE_32DPS;
 acc_odr_t acc_odr = acc_odr_norm_30;
 gyro_odr_t gyro_odr = gyro_odr_norm_30;
 sensor_state_t sensor_state = sensor_default;
@@ -104,6 +104,40 @@ float accelScales, gyroScales;
 float accelScales = 0;
 uint8_t readings[12];
 uint32_t reading_timestamp_us; // timestamp in arduino micros() time
+
+void gyroHardwareCalibrationToZero()
+{
+    QMI8658_transmit(QMI8658_CTRL7, 0x00);
+    QMI8658_CTRL9_Write(0xA2);
+    QMI8658_transmit(QMI8658_CTRL7, 0x83);
+}
+
+void gyroHardwareSetCalibration(float x, float y, float z)
+{
+    QMI8658_transmit(QMI8658_CTRL7, 0x00);
+    uint16_t regval[3];
+
+    // --------- Gyro host delta offset ----------
+
+    int16_t valx = (int16_t)lrintf(x * 32.0f);
+    regval[0] = (uint16_t)valx;
+    int16_t valy = (int16_t)lrintf(y * 32.0f);
+    regval[1] = (uint16_t)valy;
+    int16_t valz = (int16_t)lrintf(z * 32.0f);
+    regval[2] = (uint16_t)valz;
+
+    // Write CAL1..3
+    QMI8658_transmit(QMI8658_CAL1_L, regval[0] & 0xFF);
+    QMI8658_transmit(QMI8658_CAL1_H, regval[0] >> 8);
+    QMI8658_transmit(QMI8658_CAL2_L, regval[1] & 0xFF);
+    QMI8658_transmit(QMI8658_CAL2_H, regval[1] >> 8);
+    QMI8658_transmit(QMI8658_CAL3_L, regval[2] & 0xFF);
+    QMI8658_transmit(QMI8658_CAL3_H, regval[2] >> 8);
+
+    // Issue command to apply gyro delta offset
+    QMI8658_CTRL9_Write(0x0A);
+    QMI8658_transmit(QMI8658_CTRL7, 0x83);
+}
 /**
  * Inialize Wire and send default configs
  * @param addr I2C address of sensor, typically 0x6A or 0x6B
@@ -387,11 +421,10 @@ void setState(sensor_state_t state)
         // enable high speed internal clock,
         // acc and gyro in full mode, and
         // disable syncSample mode
-        //QMI8658_transmit(QMI8658_CTRL7, 0x43);
+        // QMI8658_transmit(QMI8658_CTRL7, 0x43);
 
         // 1.1.17 enable syncSample mode to allow the filter works in sync
         QMI8658_transmit(QMI8658_CTRL7, 0x83);
-
 
         // disable AttitudeEngine Motion On Demand
         QMI8658_transmit(QMI8658_CTRL6, 0x00);
@@ -585,8 +618,8 @@ void getAttitude(void)
 
     if (EnableAttitudeMadgwick == 0)
     {
-        updateAttitude(AccelFiltered.z, AccelFiltered.y, -AccelFiltered.x, GyroFiltered.z + GyroBias.z + GyroCalibration.z, -(GyroFiltered.y + GyroBias.y + GyroCalibration.y), &AttitudeRoll, &AttitudePitch);
-        AttitudeYawDegreePerSecond = -(GyroFiltered.x + GyroBias.x + GyroCalibration.x);
+        updateAttitude(AccelFiltered.z, AccelFiltered.y, -AccelFiltered.x, GyroFiltered.z + GyroBias.z, -(GyroFiltered.y + GyroBias.y), &AttitudeRoll, &AttitudePitch);
+        AttitudeYawDegreePerSecond = -(GyroFiltered.x + GyroBias.x);
     }
     else
     {
@@ -599,9 +632,9 @@ void getAttitude(void)
         // float DEG2RAD = 3.14159265359f / 180.0f;
 
         // Example: convert gyro values
-        float gz_rad = (GyroFiltered.z + GyroBias.z + GyroCalibration.z) * DEG2RAD;
-        float gy_rad = (GyroFiltered.y + GyroBias.y + GyroCalibration.y) * DEG2RAD;
-        float gx_rad = (GyroFiltered.x + GyroBias.x + GyroCalibration.x) * DEG2RAD;
+        float gz_rad = (GyroFiltered.z + GyroBias.z) * DEG2RAD;
+        float gy_rad = (GyroFiltered.y + GyroBias.y) * DEG2RAD;
+        float gx_rad = (GyroFiltered.x + GyroBias.x) * DEG2RAD;
         // No interference between axis but Q output Roll and Pitch output are swapped
 
         Madgwick_UpdateIMU(gy_rad, gz_rad, gx_rad,
@@ -685,7 +718,7 @@ void getAttitude(void)
         //  3. Get Euler angles
         // Roll and Pitch are swapped
         Madgwick_GetEuler(&AttitudePitch, &AttitudeRoll, &AttitudeYaw);
-        //Madgwick_GetEuler(&AttitudeRoll, &AttitudePitch, &AttitudeYaw);
+        // Madgwick_GetEuler(&AttitudeRoll, &AttitudePitch, &AttitudeYaw);
 
         static float prev_yaw = 0;
         float dt = 0.05f; // 1/20Hz

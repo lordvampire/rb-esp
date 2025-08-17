@@ -171,3 +171,5 @@ void getAccelerometer(void);
 void getGyroscope(void);
 void getGFactor(void);
 void getAttitude(void);
+void gyroHardwareCalibrationToZero();
+void gyroHardwareSetCalibration(float x, float y, float z);
