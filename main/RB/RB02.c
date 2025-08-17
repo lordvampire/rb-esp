@@ -148,7 +148,6 @@ extern float BAT_analogVolts;          // 1.1.4 Power management
 extern uint8_t LCD_Backlight;
 extern IMUdata AccelFilteredMax;
 extern IMUdata GyroBias;
-extern IMUdata GyroCalibration;
 // 1.1.8 Quaternion alignment
 extern IMUdata AccelBias;
 extern lv_coord_t TouchPadLastX;
@@ -372,10 +371,8 @@ int lastAttitudeRoll = 0;
 datetime_t stopwatch = {0};
 uint8_t DeviceIsDemoMode = 0;
 tabs StartupPage = 0;
-lv_obj_t *Loading_slider = NULL;
 bool OperativeWarningVisible = false;
 lv_obj_t *OperativeWarning = NULL;
-lv_timer_t *auto_step_timer = NULL;
 lv_obj_t *tv = NULL;
 const lv_font_t *font_large;
 const lv_font_t *font_normal;
@@ -489,14 +486,9 @@ lv_obj_t *t0 = NULL;
 void RB02_Example1(void)
 {
 
-  // initialise the Centralised configuration
-  singletonConfig();
-
   font_large = LV_FONT_DEFAULT;
   font_normal = LV_FONT_DEFAULT;
 
-  lv_coord_t tab_h;
-  tab_h = 0;
 #if LV_FONT_MONTSERRAT_20
   font_large = &lv_font_montserrat_20;
 #else
@@ -510,16 +502,14 @@ void RB02_Example1(void)
 
   ApplyCoding();
   nvsRestoreGMeter();
-  LCD_Backlight = 0;
-  Set_Backlight(LCD_Backlight);
+  // LCD_Backlight = 0;
+  // Set_Backlight(LCD_Backlight);
 
   lv_style_init(&style_title);
   // lv_style_set_text_font(&style_title, font_large);
   lv_style_set_text_font(&style_title, &lv_font_montserrat_16);
   lv_style_set_text_color(&style_title, lv_color_white());
-  tv = lv_tabview_create(lv_scr_act(), LV_DIR_TOP, tab_h);
   lv_obj_set_style_text_font(lv_scr_act(), font_normal, 0);
-  lv_obj_set_style_bg_color(tv, lv_color_black(), LV_STATE_DEFAULT);
 
   // 1.1.5 Added Vendor Splashscreen
 #ifdef ENABLE_VENDOR
@@ -686,23 +676,6 @@ void RB02_Example1(void)
   uint8_t bmp280BufferReset[1] = {0xB6};
   I2C_Write(0x76, 0xE0, &bmp280BufferReset[0], 1);
 
-  //
-  auto_step_timer = lv_timer_create(rb_increase_lvgl_tick, 100, NULL);
-
-  //
-  Loading_slider = lv_slider_create(lv_scr_act());
-
-  lv_obj_set_size(Loading_slider, 240, 15);
-  lv_obj_set_style_radius(Loading_slider, 3, LV_PART_KNOB); // Adjust the value for more or less rounding
-  lv_obj_set_style_bg_opa(Loading_slider, LV_OPA_TRANSP, LV_PART_KNOB);
-  // lv_obj_set_style_pad_all(Backlight_slider, 0, LV_PART_KNOB);
-  lv_obj_set_style_bg_color(Loading_slider, lv_color_hex(0xAAAAAA), LV_PART_KNOB);
-  lv_obj_set_style_bg_color(Loading_slider, lv_color_hex(0xFFFFFF), LV_PART_INDICATOR);
-  lv_obj_set_style_outline_width(Loading_slider, 2, LV_PART_INDICATOR);
-  lv_obj_set_style_outline_color(Loading_slider, lv_color_hex(0xD3D3D3), LV_PART_INDICATOR);
-  lv_slider_set_range(Loading_slider, 0, 100);
-  lv_slider_set_value(Loading_slider, workflow, LV_ANIM_ON);
-  lv_obj_align(Loading_slider, LV_ALIGN_CENTER, 0, 10);
   // 1.1.5 Added Vendor Splashscreen
 #ifndef ENABLE_VENDOR
   if (StartupPage != 0)
@@ -1216,7 +1189,6 @@ void nvsRestoreGMeter()
       GFactorMax = f / 10.0;
       break;
     case ESP_ERR_NVS_NOT_FOUND:
-      printf("The gmeter_max is not initialized yet!\n");
       break;
     default:
       printf("Error (%s) reading!\n", esp_err_to_name(err));
@@ -1233,7 +1205,6 @@ void nvsRestoreGMeter()
       GFactorMin = f / 10.0;
       break;
     case ESP_ERR_NVS_NOT_FOUND:
-      printf("The gmeter_min is not initialized yet!\n");
       break;
     default:
       printf("Error (%s) reading!\n", esp_err_to_name(err));
@@ -1249,15 +1220,15 @@ void nvsRestoreGMeter()
 #endif
       break;
     case ESP_ERR_NVS_NOT_FOUND:
-      printf("The pcal is not initialized yet!\n");
       break;
     default:
       printf("Error (%s) reading!\n", esp_err_to_name(err));
     }
 
     singletonConfig()->bmp280override = pcal;
-
-    nvs_get_u8(my_handle, "autoQNH", &(singletonConfig()->settingsAutoQNH));
+    uint8_t autoQNH = 1;
+    nvs_get_u8(my_handle, "autoQNH", &autoQNH);
+    singletonConfig()->settingsAutoQNH = autoQNH;
 
     uint8_t defaultPageOrDemo = 0xff; // value will default to 0, if not set yet in NVS
                                       // 1.1.23 Default is Advanced Attitude Indicator
@@ -1274,7 +1245,6 @@ void nvsRestoreGMeter()
 #endif
       break;
     case ESP_ERR_NVS_NOT_FOUND:
-      printf("The defaultPageOrDemo is not initialized yet!\n");
       break;
     default:
       printf("Error (%s) reading!\n", esp_err_to_name(err));
@@ -1303,7 +1273,6 @@ void nvsRestoreGMeter()
 #endif
       break;
     case ESP_ERR_NVS_NOT_FOUND:
-      printf("The GpsSpeed0ForDisable is not initialized yet!\n");
       break;
     default:
       printf("Error (%s) reading!\n", esp_err_to_name(err));
@@ -1328,7 +1297,7 @@ void nvsRestoreGMeter()
     intBuffer = 10;
     nvs_get_u8(my_handle, "filterGyro", &intBuffer);
     FilterMoltiplierGyro = intBuffer;
-    intBuffer = 90;
+    intBuffer = 230;
     nvs_get_u8(my_handle, "filterAttitude", &intBuffer);
     AttitudeBalanceAlpha = intBuffer / 250.0;
     // 1.1.23 Bugfix Filter Output is not stored
@@ -1347,14 +1316,16 @@ void nvsRestoreGMeter()
     // 1.1.24 Warning the Gyro Calibration has being increased to 1000.0 (!)
     int16_t compBuffer = 0;
     nvs_get_i16(my_handle, "calGX", &compBuffer);
-    GyroCalibration.x = compBuffer / RB_GYRO_CALIBRATION_PRECISION;
+    singletonConfig()->GyroHardwareCalibration.x = compBuffer / RB_GYRO_CALIBRATION_PRECISION;
     nvs_get_i16(my_handle, "calGY", &compBuffer);
-    GyroCalibration.y = compBuffer / RB_GYRO_CALIBRATION_PRECISION;
+    singletonConfig()->GyroHardwareCalibration.y = compBuffer / RB_GYRO_CALIBRATION_PRECISION;
     nvs_get_i16(my_handle, "calGZ", &compBuffer);
-    GyroCalibration.z = compBuffer / RB_GYRO_CALIBRATION_PRECISION;
+    singletonConfig()->GyroHardwareCalibration.z = compBuffer / RB_GYRO_CALIBRATION_PRECISION;
 #ifdef RB_ENABLE_CONSOLE_DEBUG
-    printf("Gyro Calibration %.1f %.1f %.1f\n", GyroCalibration.x, GyroCalibration.z, GyroCalibration.z);
+    printf("Gyro Calibration %.1f %.1f %.1f\n", singletonConfig()->GyroHardwareCalibration.x, singletonConfig()->GyroHardwareCalibration.z, singletonConfig()->GyroHardwareCalibration.z);
 #endif
+
+    gyroHardwareSetCalibration(GyroFiltered.x, GyroFiltered.y, GyroFiltered.z);
 
 #ifdef RB_ENABLE_GPS
     // 1.1.25B
@@ -1477,11 +1448,11 @@ void nvsStoreGyroCalibration()
     // Write
     int16_t calBuffer = 0;
 
-    calBuffer = GyroCalibration.x * RB_GYRO_CALIBRATION_PRECISION;
+    calBuffer = singletonConfig()->GyroHardwareCalibration.x * RB_GYRO_CALIBRATION_PRECISION;
     nvs_set_i16(my_handle, "calGX", calBuffer);
-    calBuffer = GyroCalibration.y * RB_GYRO_CALIBRATION_PRECISION;
+    calBuffer = singletonConfig()->GyroHardwareCalibration.y * RB_GYRO_CALIBRATION_PRECISION;
     nvs_set_i16(my_handle, "calGY", calBuffer);
-    calBuffer = GyroCalibration.z * RB_GYRO_CALIBRATION_PRECISION;
+    calBuffer = singletonConfig()->GyroHardwareCalibration.z * RB_GYRO_CALIBRATION_PRECISION;
     nvs_set_i16(my_handle, "calGZ", calBuffer);
     nvs_close(my_handle);
   }
@@ -2069,7 +2040,8 @@ void rb_increase_lvgl_tick(lv_timer_t *t)
   // TODO: add a configuration panel
   uint8_t forcedCalibrationOnBoot = true;
 #ifdef RB_02_DISPLAY_TOUCH
-  forcedCalibrationOnBoot = false;
+  // TODO: move in settings
+  forcedCalibrationOnBoot = true;
 #endif
   static int stepDown = 50;
   if (workflow > 100)
@@ -2106,40 +2078,57 @@ void rb_increase_lvgl_tick(lv_timer_t *t)
   {
     switch (workflow)
     {
+    case 0:
+      Buzzer_On();
+      break;
+    case 1:
+      Buzzer_Off();
+      break;
     case 2:
-      RB02_CreateScreens();
+      LCD_Backlight = 10;
+      Set_Backlight(LCD_Backlight);
       break;
     case 3:
-      bmp280Setup();
+      gyroHardwareCalibrationToZero();
+    break;
+    case 35:
+      LCD_Backlight = Backlight_MAX;
+      Set_Backlight(LCD_Backlight);
       break;
-    case 4:
-#ifdef RB02_ESP_BLUETOOTH
-      esp_ble_gap_start_scanning(30); // scan for 30 seconds
-#endif
+    case 5:
+      RB02_Example1();
+      break;
+    case 30:
+      RB02_CreateScreens();
+      break;
+    case 6:
+      bmp280Setup();
       break;
     case 7:
       readCalibration();
-      LCD_Backlight = 1;
-      Set_Backlight(LCD_Backlight);
       break;
-    case 8:
+    case 78:
       if (forcedCalibrationOnBoot == true)
       {
-        GyroBiasAcquire[0].x = GyroFiltered.x + GyroCalibration.x;
-        GyroBiasAcquire[0].y = GyroFiltered.y + GyroCalibration.y;
-        GyroBiasAcquire[0].z = GyroFiltered.z + GyroCalibration.z;
+        GyroBiasAcquire[0].x = GyroFiltered.x;
+        GyroBiasAcquire[0].y = GyroFiltered.y;
+        GyroBiasAcquire[0].z = GyroFiltered.z;
       }
       break;
-    case 9:
-      LCD_Backlight = 100;
-      Set_Backlight(LCD_Backlight);
+    case 40:
+#ifdef RB02_ESP_BLUETOOTH
+      esp_ble_gap_start_scanning(30); // scan for 30 seconds
+#ifdef RB_ENABLE_CONSOLE
+      RB02_Console_AppendLog(6, RB02_LOG_INFO, "BLE Scan started");
+#endif
+#endif
       break;
-    case 50:
+    case 79:
       if (forcedCalibrationOnBoot == true)
       {
-        GyroBiasAcquire[1].x = GyroFiltered.x + GyroCalibration.x;
-        GyroBiasAcquire[1].y = GyroFiltered.y + GyroCalibration.y;
-        GyroBiasAcquire[1].z = GyroFiltered.z + GyroCalibration.z;
+        GyroBiasAcquire[1].x = GyroFiltered.x;
+        GyroBiasAcquire[1].y = GyroFiltered.y;
+        GyroBiasAcquire[1].z = GyroFiltered.z;
       }
       break;
     case 60:
@@ -2148,9 +2137,9 @@ void rb_increase_lvgl_tick(lv_timer_t *t)
     case 80:
       if (forcedCalibrationOnBoot == true)
       {
-        GyroBiasAcquire[2].x = GyroFiltered.x + GyroCalibration.x;
-        GyroBiasAcquire[2].y = GyroFiltered.y + GyroCalibration.y;
-        GyroBiasAcquire[2].z = GyroFiltered.z + GyroCalibration.z;
+        GyroBiasAcquire[2].x = GyroFiltered.x;
+        GyroBiasAcquire[2].y = GyroFiltered.y;
+        GyroBiasAcquire[2].z = GyroFiltered.z;
         GyroBias.x = -(GyroBiasAcquire[0].x + GyroBiasAcquire[1].x + GyroBiasAcquire[2].x) / 3.0;
         GyroBias.y = -(GyroBiasAcquire[0].y + GyroBiasAcquire[1].y + GyroBiasAcquire[2].y) / 3.0;
         GyroBias.z = -(GyroBiasAcquire[0].z + GyroBiasAcquire[1].z + GyroBiasAcquire[2].z) / 3.0;
@@ -2213,11 +2202,11 @@ void rb_increase_lvgl_tick(lv_timer_t *t)
       datetimeTimer1 = datetime;
       datetimeTimer2 = datetime;
       datetimeTimer3 = datetime;
-      if (Loading_slider != NULL)
+      if (singletonConfig()->ui.Loading_slider != NULL)
       {
-        lv_obj_add_flag(Loading_slider, LV_OBJ_FLAG_HIDDEN);
-        lv_obj_del(Loading_slider);
-        Loading_slider = NULL;
+        lv_obj_add_flag(singletonConfig()->ui.Loading_slider, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_del(singletonConfig()->ui.Loading_slider);
+        singletonConfig()->ui.Loading_slider = NULL;
       }
       // 1.1.5 Added Vendor Splashscreen
 #ifdef ENABLE_VENDOR
@@ -2234,17 +2223,15 @@ void rb_increase_lvgl_tick(lv_timer_t *t)
       }
 #endif
 
-      LCD_Backlight = 100;
-      Set_Backlight(LCD_Backlight);
       break;
     default:
       break;
     }
 
     workflow++;
-    if (Loading_slider != NULL)
+    if (singletonConfig()->ui.Loading_slider != NULL)
     {
-      lv_slider_set_value(Loading_slider, workflow, LV_ANIM_ON);
+      lv_slider_set_value(singletonConfig()->ui.Loading_slider, workflow, LV_ANIM_ON);
     }
   }
 
@@ -2613,9 +2600,9 @@ void rb_increase_lvgl_tick(lv_timer_t *t)
             AccelFiltered.x,
             AccelFiltered.y,
             AccelFiltered.z,
-            GyroFiltered.x + GyroBias.x + GyroCalibration.x,
-            GyroFiltered.y + GyroBias.y + GyroCalibration.y,
-            GyroFiltered.z + GyroBias.z + GyroCalibration.z);
+            GyroFiltered.x + GyroBias.x ,
+            GyroFiltered.y + GyroBias.y ,
+            GyroFiltered.z + GyroBias.z );
     lv_label_set_text(SettingStatus1, buf);
 
     sprintf(buf, "R:%2.1f P:%2.1f T:%2.1f",
@@ -2625,9 +2612,9 @@ void rb_increase_lvgl_tick(lv_timer_t *t)
     lv_label_set_text(SettingStatus2, buf);
 
     sprintf(buf, "CX:%2.1f CY:%2.1f CZ:%2.1f BX:%2.1f BY:%2.1f BZ:%2.1f",
-            GyroCalibration.x,
-            GyroCalibration.y,
-            GyroCalibration.z,
+            singletonConfig()->GyroHardwareCalibration.x,
+            singletonConfig()->GyroHardwareCalibration.y,
+            singletonConfig()->GyroHardwareCalibration.z,
             GyroBias.x,
             GyroBias.y,
             GyroBias.z);
@@ -2750,9 +2737,9 @@ static void mbox1_cage_event_cb(lv_event_t *e)
       if (strcmp("CAGE", txt) == 0)
       {
         // TODO: make an avg
-        GyroBias.x = -GyroFiltered.x - GyroCalibration.x;
-        GyroBias.y = -GyroFiltered.y - GyroCalibration.y;
-        GyroBias.z = -GyroFiltered.z - GyroCalibration.z;
+        GyroBias.x = -GyroFiltered.x ;
+        GyroBias.y = -GyroFiltered.y ;
+        GyroBias.z = -GyroFiltered.z ;
 
         rb_check_attitude_inop();
       }
@@ -3301,7 +3288,6 @@ static void Backlight_adjustment_event_Changed(lv_event_t *e)
   printf("Changed Backlight ratio from: %d to: %d\n", LCD_Backlight, Backlight);
 #endif
   Set_Backlight(Backlight);
-  LCD_Backlight = Backlight;
 }
 static void GMeterMaxChanged(lv_event_t *e)
 {
@@ -3335,10 +3321,13 @@ static void event_handler_gyro_calibrate(lv_event_t *e)
   lv_event_code_t code = lv_event_get_code(e);
   if (code == LV_EVENT_CLICKED)
   {
-    GyroCalibration.x = -GyroFiltered.x;
-    GyroCalibration.y = -GyroFiltered.y;
-    GyroCalibration.z = -GyroFiltered.z;
 
+    // 1.1.30 we switched from software calibration to hardware calibration
+    singletonConfig()->GyroHardwareCalibration.x = GyroFiltered.x;
+    singletonConfig()->GyroHardwareCalibration.y = GyroFiltered.y;
+    singletonConfig()->GyroHardwareCalibration.z = GyroFiltered.z;
+    // 1.1.30
+    gyroHardwareSetCalibration(GyroFiltered.x, GyroFiltered.y, GyroFiltered.z);
     GyroBias.x = 0;
     GyroBias.y = 0;
     GyroBias.z = 0;
@@ -3741,7 +3730,7 @@ static void Onboard_create_Setup(lv_obj_t *parent)
     lv_obj_set_style_outline_width(DisableFiltering, 2, LV_PART_INDICATOR);
     lv_obj_set_style_outline_color(DisableFiltering, lv_color_hex(0xD3D3D3), LV_PART_INDICATOR);
     lv_slider_set_range(DisableFiltering, 0, Backlight_MAX);
-    lv_slider_set_value(DisableFiltering, LCD_Backlight, LV_ANIM_OFF);
+    lv_slider_set_value(DisableFiltering, 100, LV_ANIM_OFF);
     lv_obj_add_event_cb(DisableFiltering, Backlight_adjustment_event_Changed, LV_EVENT_VALUE_CHANGED, DisableFiltering);
     lv_obj_align(DisableFiltering, LV_ALIGN_CENTER, 0, lineY + 30);
 
@@ -5468,17 +5457,17 @@ void update_Vibration_lvgl_tick(lv_timer_t *t)
   char buf[100];
   lv_obj_set_pos(Screen_Vibration_GPSAccel_Ball, -220 * GPSLateralYAcceleration / GMeterScale, 220 * GPSAccelerationForAttitudeCompensation / GMeterScale);
   lv_obj_set_pos(Screen_Vibration_Accel_Ball, -220 * AccelFiltered.y / GMeterScale, 220 * AccelFiltered.x / GMeterScale);
-  lv_obj_set_pos(Screen_GMeter_BallGyro, 220 * (GyroFiltered.z + GyroBias.z + GyroCalibration.z) / GMeterScaleGyro, 220 * (GyroFiltered.y + GyroBias.y + GyroCalibration.y) / GMeterScaleGyro);
-  lv_obj_set_pos(Screen_Vibration_Yaw_Ball, -220 * (GyroFiltered.x + GyroBias.x + GyroCalibration.x) / GMeterScaleGyro, 220 * AccelFiltered.z / GMeterScale);
-  snprintf(buf, sizeof(buf), "%2.0f %2.0f %2.0f", (GyroFiltered.x + GyroBias.x + GyroCalibration.x), (GyroFiltered.y + GyroBias.y + GyroCalibration.y), (GyroFiltered.z + GyroBias.z + GyroCalibration.z));
+  lv_obj_set_pos(Screen_GMeter_BallGyro, 220 * (GyroFiltered.z + GyroBias.z ) / GMeterScaleGyro, 220 * (GyroFiltered.y + GyroBias.y ) / GMeterScaleGyro);
+  lv_obj_set_pos(Screen_Vibration_Yaw_Ball, -220 * (GyroFiltered.x + GyroBias.x ) / GMeterScaleGyro, 220 * AccelFiltered.z / GMeterScale);
+  snprintf(buf, sizeof(buf), "%2.0f %2.0f %2.0f", (GyroFiltered.x + GyroBias.x), (GyroFiltered.y + GyroBias.y ), (GyroFiltered.z + GyroBias.z ));
   lv_label_set_text(GMeterLabelGyro, buf);
 
   if (GMeterScaleGyro < GyroFiltered.y)
-    GMeterScaleGyro = (GyroFiltered.y + GyroBias.y + GyroCalibration.y);
+    GMeterScaleGyro = (GyroFiltered.y + GyroBias.y );
   if (GMeterScaleGyro < GyroFiltered.x)
-    GMeterScaleGyro = (GyroFiltered.x + GyroBias.x + GyroCalibration.x);
+    GMeterScaleGyro = (GyroFiltered.x + GyroBias.x );
   if (GMeterScaleGyro < GyroFiltered.z)
-    GMeterScaleGyro = (GyroFiltered.z + GyroBias.z + GyroCalibration.z);
+    GMeterScaleGyro = (GyroFiltered.z + GyroBias.z );
 
   snprintf(buf, sizeof(buf), "%.1f %.1f %.1f", AccelFiltered.x, AccelFiltered.y, AccelFiltered.z);
   lv_label_set_text(Screen_Vibration_Accel_Label, buf);
