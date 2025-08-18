@@ -119,7 +119,7 @@ void Driver_Init(void)
         NULL,
         0);
 }
-void RB02_Example1(void);
+void RB02_Main();
 void app_main(void)
 {
 
@@ -147,7 +147,7 @@ void app_main(void)
     LVGL_Init();
     /********************* Demo *********************/
     // Lvgl_Example1();
-    RB02_Example1();
+    RB02_Main();
     // lv_demo_widgets();
     // lv_demo_keypad_encoder();
     // lv_demo_benchmark();
