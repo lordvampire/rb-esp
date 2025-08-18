@@ -58,6 +58,7 @@ lv_obj_t *RB02_GUIHelpers_CreateBase(lv_obj_t *parent, const lv_img_dsc_t *backg
     lv_obj_set_scrollbar_mode(parent, LV_SCROLLBAR_MODE_OFF);
     // 1.1.9 Remove scrolling for Turbolence touch screen
     lv_obj_clear_flag(parent, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_clear_flag(backgroundImage, LV_OBJ_FLAG_CLICKABLE);
     return backgroundImage;
 }
 
