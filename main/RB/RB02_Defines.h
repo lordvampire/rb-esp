@@ -28,17 +28,23 @@
 */
 
 
-
 #define EXAMPLE1_LVGL_TICK_PERIOD_MS  1000
 
 
 // 1.1.18 Unified single source for both displays
 #define RB_02_DISPLAY_21 21
 #define RB_02_DISPLAY_28 28
-#define RB_02_DISPLAY_TOUCH 1
+#include "BuildMachine.h"
+//#define RB_02_DISPLAY_TOUCH 1
+#define RB_ENABLE_SETUP 1
 
 //  1.1.3 Supports for 2.1 and 2.8 displays
-#define RB_02_DISPLAY_SIZE RB_02_DISPLAY_28
+//#define RB_02_DISPLAY_SIZE RB_02_DISPLAY_28
+
+#ifndef RB_02_DISPLAY_SIZE
+#error You must define the display size
+#endif
+
 #define SCREEN_HEIGHT 480
 #define SCREEN_WIDTH 480
 
@@ -53,14 +59,14 @@
 #define RB_GYRO_CALIBRATION_PRECISION 1000.0
 
 // 1.1.19 Add Map capability
-#define RB_ENABLE_MAP 1
+//#define RB_ENABLE_MAP 1
 //#define RB_02_ENABLE_INTERNALMAP 1
-#define RB_02_ENABLE_EXTERNALMAP 1
-#define RB_ENABLE_CHECKLIST 1
-#define RB_ENABLE_DATALOGGER 1
+//#define RB_02_ENABLE_EXTERNALMAP 1
+//#define RB_ENABLE_CHECKLIST 1
+//#define RB_ENABLE_DATALOGGER 1
 
 // 1.1.20 Advanced Attitude Indicator
-#define RB_ENABLE_AAT 1
+//#define RB_ENABLE_AAT 1
 
 
 // 1.1.23 GPS Diagnostic Screen
@@ -74,24 +80,25 @@
 
 // 1.2.1 Enble Traffic Services
 #ifdef RB02_ESP_BLUETOOTH
-#define RB02_FLARM_SERIAL 10                     // ONLY FOR PERSONAL USE this feature is under Partner contract, if you want to sell this you shall have the dual licensing
-#define RB_ENABLE_TRAFFIC RB02_FLARM_SERIAL      // ONLY FOR PERSONAL USE this feature is under Partner contract, if you want to sell this you shall have the dual licensing
+#define RB05_Flarm_SERIAL 10                     // ONLY FOR PERSONAL USE this feature is under Partner contract, if you want to sell this you shall have the dual licensing
+#define RB_ENABLE_TRAFFIC RB05_Flarm_SERIAL      // ONLY FOR PERSONAL USE this feature is under Partner contract, if you want to sell this you shall have the dual licensing
 #define RB02_BLUETOOTH_DIAG 1                    // ONLY FOR PERSONAL USE this feature is under Partner contract, if you want to sell this you shall have the dual licensing
 #endif
 
 
 
 // 1.1.2 Version is here
-#define RB_VERSION "1.1.27"
+// #define RB_VERSION "1.1.27"
 // 1.1.1 Remove tabs with GPS if not installed
 #define RB01_GPS_PROTOCOL_UART  1
 #ifdef RB02_ESP_BLUETOOTH
 #define RB01_GPS_PROTOCOL_BLE   2
+#define RB01_GPS_PROTOCOL RB01_GPS_PROTOCOL_BLE
 #endif
-#define RB_ENABLE_GPS RB01_GPS_PROTOCOL_UART
+
 // 1.1.19 Starting getting rid of demo screens
 // #define ENABLE_DEMO_SCREENS 1
-#define VIBRATION_TEST 1
+//#define VIBRATION_TEST 1
 
 
 // 1.3.1 Enable Engine Monitoring System EMS
