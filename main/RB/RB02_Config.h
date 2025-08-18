@@ -30,6 +30,7 @@
 
 #include "lvgl.h"
 #include "RB02_Defines.h"
+#include "QMI8658.h"
 
 #ifdef RB_ENABLE_GPS
 #include "RB02_NMEA.h"
@@ -40,7 +41,11 @@
 #endif
 
 #ifdef RB_ENABLE_TRAFFIC
-#include "RB02_Traffic.h"
+#include "RB05_Traffic.h"
+#endif
+
+#ifdef RB_ENABLE_CONSOLE
+void RB02_Console_AppendLog(uint8_t sourceId,uint8_t logLevel,const char *string);
 #endif
 
 #define RB02_STRUCTURE_CONFIG 1
@@ -52,6 +57,7 @@ typedef struct
     lv_obj_t *Screen_Track_TrackSource;
     lv_obj_t *Screen_Track_TrackText;
     lv_obj_t *parent;
+    int16_t AttitudeYawCorrection;
 } RB02_Gyro;
 
 
@@ -64,15 +70,26 @@ typedef struct
 typedef struct
 {
     lv_obj_t *SettingsSpeedSummary;
+    lv_obj_t *SettingsOperativeSummary;
 #ifdef RB_ENABLE_GPS
     RB02_Gyro Gyro;
 #endif
     RB02_AltimeterAnalog altimeterAnalog;
+#ifdef RB_ENABLE_CONSOLE
+    lv_obj_t *console;
+#endif
+    lv_obj_t *Loading_slider;
 } RB02_UI;
 
 typedef struct
 {
+    IMUdata GyroHardwareCalibration;
     uint8_t settingsCalibrateOnBoot;
+#ifdef RB02_ESP_BLUETOOTH
+    uint8_t settingsBluetoothEnabled;
+    uint8_t Operative_Bluetooth;
+    uint8_t settingsBluetoothGPS;
+#endif
     uint8_t settingsAutoQNH;
     int32_t bmp280override;
     uint8_t structureVersion;
@@ -86,7 +103,7 @@ typedef struct
 RB02_GpsMapStatus gpsMapStatus;
 #endif
 #ifdef RB_ENABLE_TRAFFIC
-RB02_TrafficStatus trafficStatus;
+RB05_TrafficStatus trafficStatus;
 #endif
     RB02_UI ui;
 } RB02_Status;
@@ -94,3 +111,15 @@ RB02_TrafficStatus trafficStatus;
 extern RB02_Status *rb02Status;
 
 RB02_Status *singletonConfig();
+
+#ifdef RB02_ESP_BLUETOOTH
+uint8_t RB02_Config_NVS_Store_BluetoothSettings();
+#define NVS_KEY_BT_ENABLE           "btenable"
+#define NVS_KEY_BT_GPS              "usebtgps"
+
+void RB02_Config_Set_OperativeBluetooth(uint8_t operative);
+#endif
+
+
+// NVS Defines
+#define NVS_STORAGE             "storage"
