@@ -22,6 +22,7 @@ idf_component_register(
                               "RB/RB02_GUIHelpers.c"
                               "RB/RB02_DataLogger.c"
                               "RB/RB02_Navigator.c"
+                              "RB/RB02_Workflow.c"
                               "RB/RB04_EMS.c"
                               "RB/Vendor.c"
                               "RB/madgwick.c"
@@ -30,7 +31,6 @@ idf_component_register(
                               "RB/RB05_Radar.c"
                               "Buzzer/Buzzer.c"
                               "Bluetooth/RB05_ESP_Bluetooth.c"
-                              "Wireless/Bobby.c"
                               "BAT_Driver/BAT_Driver.c"
 
                         INCLUDE_DIRS "./EXIO"
