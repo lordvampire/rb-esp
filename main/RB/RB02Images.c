@@ -30,9 +30,6 @@
 #include "att_aircraft.c"
 #include "att_tri.c"
 
-// Gyro
-#include "RoundGyro.c"
-#include "RoundGyroHeading.c"
 
 // Variometer
 #include "RoundVariometer.c"
