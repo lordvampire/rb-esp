@@ -559,6 +559,7 @@ lv_obj_t *RB02_GPSMap_CreateScreen(RB02_GpsMapStatus *gpsMapStatus, lv_obj_t *pa
         lv_obj_align(label, LV_ALIGN_CENTER, 0, 0);
         lv_obj_set_style_text_font(label, &lv_font_montserrat_32, 0);
         lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
+        lv_obj_set_style_text_color(label, lv_color_white(), 0);
         lv_label_set_text(label, "-------");
         gpsMapStatus->labelTilePath = label;
     }
@@ -618,8 +619,8 @@ lv_obj_t *RB02_GPSMap_CreateScreen(RB02_GpsMapStatus *gpsMapStatus, lv_obj_t *pa
     if (true)
     {
         lv_obj_t *label = lv_label_create(parent);
-        lv_obj_set_size(label, 150, 20);
-        lv_obj_align(label, LV_ALIGN_CENTER, 0, 204);
+        lv_obj_set_size(label, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+        lv_obj_align(label, LV_ALIGN_CENTER, 0, 196);
         lv_obj_set_style_text_font(label, &lv_font_montserrat_24, 0);
         lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
         lv_label_set_text(label, "-------");
@@ -629,8 +630,8 @@ lv_obj_t *RB02_GPSMap_CreateScreen(RB02_GpsMapStatus *gpsMapStatus, lv_obj_t *pa
     if (true)
     {
         lv_obj_t *label = lv_label_create(parent);
-        lv_obj_set_size(label, 150, 20);
-        lv_obj_align(label, LV_ALIGN_CENTER, 0, 222);
+        lv_obj_set_size(label, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+        lv_obj_align(label, LV_ALIGN_CENTER, 0, 218);
         lv_obj_set_style_text_font(label, &lv_font_montserrat_24, 0);
         lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
         lv_label_set_text(label, "--------");
@@ -642,6 +643,18 @@ lv_obj_t *RB02_GPSMap_CreateScreen(RB02_GpsMapStatus *gpsMapStatus, lv_obj_t *pa
 
 
 #define RB_GPS_MAP_PRECISION 500.0
+
+void RB02_GPSMap_Touch_W(RB02_GpsMapStatus *gpsMapStatus)
+{
+    RB02_GPSMap_ShowLoading(gpsMapStatus, true);
+    gpsMapStatus->latitude100 = 0;
+}
+
+void RB02_GPSMap_Touch_E(RB02_GpsMapStatus *gpsMapStatus)
+{
+    RB02_GPSMap_ShowLoading(gpsMapStatus, true);
+    gpsMapStatus->latitude100 = 0;
+}
 
 void RB02_GPSMap_Tick(RB02_GpsMapStatus *gpsMapStatus, gps_t *gpsStatus, lv_obj_t *parent)
 {

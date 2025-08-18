@@ -62,6 +62,7 @@ typedef struct
     lv_obj_t *labelLatitude;
     lv_obj_t *labelTilePath;
     lv_obj_t *labelLongitude;
+    lv_obj_t *labelLoading;
     int32_t mapLatitudeBegin;
     int32_t mapLongitudeBegin;
     int32_t mapLatitudeEnd;
@@ -74,4 +75,7 @@ lv_obj_t *RB02_GPSMap_CreateScreen(RB02_GpsMapStatus *gpsMapStatus, lv_obj_t *pa
 void RB02_GPSMap_Tick(RB02_GpsMapStatus *gpsMapStatus, gps_t *gpsStatus,lv_obj_t *parent);
 void RB02_GPSMap_Touch_N(RB02_GpsMapStatus *gpsMapStatus);
 void RB02_GPSMap_Touch_S(RB02_GpsMapStatus *gpsMapStatus);
+void RB02_GPSMap_Touch_W(RB02_GpsMapStatus *gpsMapStatus);
+void RB02_GPSMap_Touch_E(RB02_GpsMapStatus *gpsMapStatus);
+
 #endif
