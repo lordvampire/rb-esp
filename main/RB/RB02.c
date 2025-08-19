@@ -580,13 +580,13 @@ void RB02_Example1(void)
 #endif
 
 #ifdef RB_ENABLE_GPS_DIAG
-  lv_obj_t *tGPSDiag = lv_tabview_add_tab(tv, "GPS Diag");
-  lv_obj_add_event_cb(tGPSDiag, speedBgClicked, LV_EVENT_CLICKED, NULL);
+  singletonConfig()->ui.tGPSDiag = lv_tabview_add_tab(tv, "GPS Diag");
+  lv_obj_add_event_cb(singletonConfig()->ui.tGPSDiag, speedBgClicked, LV_EVENT_CLICKED, NULL);
 #endif
 
 #ifdef RB_ENABLE_CONSOLE
-  lv_obj_t *tConsole = lv_tabview_add_tab(tv, "GPS Diag");
-  lv_obj_add_event_cb(tConsole, speedBgClicked, LV_EVENT_CLICKED, NULL);
+  singletonConfig()->ui.tConsole = lv_tabview_add_tab(tv, "Console");
+  lv_obj_add_event_cb(singletonConfig()->ui.tConsole, speedBgClicked, LV_EVENT_CLICKED, NULL);
 #endif
 
 // lv_obj_t *t10 = lv_tabview_add_tab(tv, "Demo");
@@ -661,16 +661,6 @@ void RB02_Example1(void)
   Onboard_create_VibrationTest(t10);
 #else
 #endif
-
-#ifdef RB_ENABLE_GPS_DIAG
-  RB02_GPSDiag_CreateScreen(tGPSDiag);
-#endif
-
-#ifdef RB_ENABLE_CONSOLE
-  RB02_Console_CreateScreen(tConsole);
-#endif
-
-  // Onboard_create(t10);
 
   // BMP280
   uint8_t bmp280BufferReset[1] = {0xB6};
@@ -1965,6 +1955,13 @@ void rb_check_attitude_inop()
 
 void RB02_CreateScreens()
 {
+#ifdef RB_ENABLE_GPS_DIAG
+  RB02_GPSDiag_CreateScreen(singletonConfig()->ui.tGPSDiag);
+#endif
+
+#ifdef RB_ENABLE_CONSOLE
+  RB02_Console_CreateScreen(singletonConfig()->ui.tConsole);
+#endif
   // 1.1.6
   OperativeWarning = lv_img_create(lv_scr_act());
   lv_obj_add_flag(OperativeWarning, LV_OBJ_FLAG_HIDDEN);
@@ -2005,6 +2002,9 @@ void RB02_CreateScreens()
         lv_obj_clear_flag(lvTabSplashScreen, LV_OBJ_FLAG_SCROLLABLE);
         VendorSplashScreenImage = backgroundImage;
         loadInternalSplashscreen = false;
+#ifdef RB_ENABLE_CONSOLE
+        RB02_Console_AppendLog(RB02_LOG_MAIN, RB02_LOG_INFO, "SS48016.bmp loaded");
+#endif
       }
     }
     else
