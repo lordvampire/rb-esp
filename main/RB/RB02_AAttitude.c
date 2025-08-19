@@ -662,7 +662,7 @@ lv_obj_t *RB02_AdvancedAttitude_CreateScreen(RB02_AdvancedAttitude_Status *aaSta
         lv_obj_set_style_text_font(label, &lv_font_montserrat_16, 0);
         lv_obj_set_style_text_color(label, lv_color_black(), 0);
 
-        lv_label_set_text(label, "RB 02\nGPS ASSISTED\nNOT CERTIFIED");
+        lv_label_set_text(label, RB_PRODUCT_TITLE "\nGPS ASSISTED\nNOT CERTIFIED");
     }
 
     for (int position = 0; position < RB_AAT_ARC_NUMBERS; position++)

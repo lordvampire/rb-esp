@@ -68,4 +68,7 @@ void RB02_MainWithConfig(RB02_Status *status)
     lv_obj_set_style_bg_color(tv, lv_color_black(), LV_STATE_DEFAULT);
     status->ui.Loading_slider = RB02_Main_CreateLoadingSlider(lv_scr_act());
     lv_timer_t *auto_step_timer = lv_timer_create(rb_increase_lvgl_tick, 100, NULL);
+    if (auto_step_timer == NULL)
+    {
+    }
 }

@@ -34,6 +34,12 @@
 // 1.1.18 Unified single source for both displays
 #define RB_02_DISPLAY_21 21
 #define RB_02_DISPLAY_28 28
+
+#define RB_LICENSE_TYPE_COMMUNITY   0
+#define RB_LICENSE_TYPE_COMMERCIAL  1
+#define RB_LICENSE_TYPE_CERTIFIED   2
+#define RB_LICENSE_TYPE_DEVELOPER   3
+
 #include "BuildMachine.h"
 //#define RB_02_DISPLAY_TOUCH 1
 #define RB_ENABLE_SETUP 1
@@ -45,15 +51,29 @@
 #error You must define the display size
 #endif
 
+#ifndef RB_PRODUCT_LINE
+#error You must define the product line
+#endif
+
+#if RB_PRODUCT_LINE == 2
+#define RB_PRODUCT_TITLE "RB 02"
+#elif RB_PRODUCT_LINE == 4
+#define RB_PRODUCT_TITLE "RB 04"
+#elif RB_PRODUCT_LINE == 5
+#define RB_PRODUCT_TITLE "RB 05"
+#else
+#error Product not found
+#endif
+
+
+#ifndef RB_LICENSE_TYPE
+#error You must define the LICENSE
+#endif
+
+
 #define SCREEN_HEIGHT 480
 #define SCREEN_WIDTH 480
 
-
-#define RB_LICENSE_TYPE_COMMUNITY   0
-#define RB_LICENSE_TYPE_COMMERCIAL  1
-#define RB_LICENSE_TYPE_CERTIFIED   2
-#define RB_LICENSE_TYPE_DEVELOPER   3
-#define RB_LICENSE_TYPE RB_LICENSE_TYPE_COMMUNITY
 
 // 1.1.24 int16_t
 #define RB_GYRO_CALIBRATION_PRECISION 1000.0

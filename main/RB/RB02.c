@@ -88,6 +88,11 @@
 #include "RB02_GPSDiag.h"
 #endif
 
+#ifdef RB_ENABLE_EMS
+#include "RB04_EMS.h"
+#endif
+
+
 #ifdef RB_ENABLE_CHECKLIST
 #include "RB02_Checklist.h"
 #endif
@@ -513,12 +518,12 @@ void RB02_Example1(void)
 
   // 1.1.5 Added Vendor Splashscreen
 #ifdef ENABLE_VENDOR
-  lv_obj_t *ts = lv_tabview_add_tab(tv, "RB-02");
+  lv_obj_t *ts = lv_tabview_add_tab(tv, RB_PRODUCT_TITLE);
   lv_obj_add_event_cb(ts, speedBgClicked, LV_EVENT_CLICKED, NULL);
   lvTabSplashScreen = ts;
 #endif
 #ifdef RB_ENABLE_EMS
-  lv_obj_t *tEMS = lv_tabview_add_tab(tv, "EMS");
+    singletonConfig()->ui.tEMS = lv_tabview_add_tab(tv, "EMS");
 #endif
 #ifdef ENABLE_DEMO_SCREENS
   lv_obj_t *tu = lv_tabview_add_tab(tv, "SynthSide");
@@ -589,11 +594,6 @@ void RB02_Example1(void)
   lv_obj_add_event_cb(singletonConfig()->ui.tConsole, speedBgClicked, LV_EVENT_CLICKED, NULL);
 #endif
 
-// lv_obj_t *t10 = lv_tabview_add_tab(tv, "Demo");
-#ifdef RB_ENABLE_EMS
-  Onboard_create_Base(tEMS, &EMSBackground);
-  lv_obj_add_event_cb(tEMS, speedBgClicked, LV_EVENT_CLICKED, NULL);
-#endif
 #ifdef ENABLE_DEMO_SCREENS
   Onboard_create_Base(tu, &RoundSynthViewSide);
   lv_obj_add_event_cb(tu, speedBgClicked, LV_EVENT_CLICKED, NULL);
@@ -1513,7 +1513,7 @@ void nvsStoreDefaultScreenOrDemo()
     nvs_close(my_handle);
   }
 }
-
+#ifdef RB_ENABLE_ATT
 void update_Attitude_lvgl_tick(lv_timer_t *t)
 {
   float moveY = 4.0 * AttitudePitch;
@@ -1576,7 +1576,8 @@ void rotate_AttitudeGearByDegree(int lastAttitudeRoll)
     }
   }
 }
-
+#endif
+#ifdef RB_ENABLE_TRN
 void update_TurnSlip_lvgl_tick(lv_timer_t *t)
 {
 
@@ -1626,6 +1627,7 @@ void update_TurnSlip2_lvgl_tick(lv_timer_t *t)
     BallAngle = BallAngle * -1;
   lv_img_set_angle(Ball, BallAngle / 2);
 }
+#endif
 int32_t bmp280Pressure = 0;
 int32_t bmp280Temperature = 0;
 int32_t Altimeter = 0;
@@ -2033,6 +2035,12 @@ void RB02_CreateScreens()
   RB02_Gyro_CreateScreen(singletonConfig()->ui.Gyro.parent);
   lv_obj_add_event_cb(singletonConfig()->ui.Gyro.parent, speedBgClicked, LV_EVENT_CLICKED, NULL);
 #endif
+
+
+#ifdef RB_ENABLE_EMS
+  RB04_EMS_CreateScreen(singletonConfig()->ui.tEMS,singletonConfig());
+  lv_obj_add_event_cb(singletonConfig()->ui.tEMS, speedBgClicked, LV_EVENT_CLICKED, NULL);
+#endif
 }
 
 void rb_increase_lvgl_tick(lv_timer_t *t)
@@ -2101,6 +2109,14 @@ void rb_increase_lvgl_tick(lv_timer_t *t)
     case 30:
       RB02_CreateScreens();
       break;
+    case 31:
+    break;
+    case 32:
+    break;
+    case 33:
+    break;
+    case 34:
+    break;
     case 6:
       bmp280Setup();
       break;
@@ -3396,7 +3412,7 @@ static void Onboard_create_Setup(lv_obj_t *parent)
     lv_obj_align(VersionLabel, LV_ALIGN_CENTER, 0, lineY);
     lv_obj_set_style_text_font(VersionLabel, &lv_font_montserrat_48, 0);
     lv_obj_set_style_text_align(VersionLabel, LV_TEXT_ALIGN_CENTER, 0);
-    lv_label_set_text(VersionLabel, "RB-02");
+    lv_label_set_text(VersionLabel, RB_PRODUCT_TITLE);
     lv_obj_add_style(VersionLabel, &style_title, LV_STATE_DEFAULT);
     lineY += 40;
   }
@@ -4229,7 +4245,7 @@ static void Onboard_create_Clock(lv_obj_t *parent)
     lv_obj_align(label, LV_ALIGN_CENTER, 0, -200);
     lv_obj_set_style_text_font(label, &lv_font_montserrat_16, 0);
     lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
-    lv_label_set_text(label, "RB 02");
+    lv_label_set_text(label, RB_PRODUCT_TITLE);
     lv_obj_add_style(label, &style_title, LV_STATE_DEFAULT);
   }
 
@@ -4324,7 +4340,7 @@ static void Onboard_create_AltimeterDigital(lv_obj_t *parent)
     lv_obj_align(label, LV_ALIGN_CENTER, 0, -200);
     lv_obj_set_style_text_font(label, &lv_font_montserrat_16, 0);
     lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
-    lv_label_set_text(label, "RB 02");
+    lv_label_set_text(label, RB_PRODUCT_TITLE);
     lv_obj_add_style(label, &style_title, LV_STATE_DEFAULT);
   }
   // 1.1.2 Added feet label
@@ -4500,7 +4516,7 @@ static void Onboard_create_Speed(lv_obj_t *parent)
     lv_obj_align(label, LV_ALIGN_CENTER, 0, -200);
     lv_obj_set_style_text_font(label, &lv_font_montserrat_16, 0);
     lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
-    lv_label_set_text(label, "RB 02");
+    lv_label_set_text(label, RB_PRODUCT_TITLE);
     lv_obj_add_style(label, &style_title, LV_STATE_DEFAULT);
   }
 
@@ -4622,7 +4638,7 @@ static void Onboard_create_Attitude(lv_obj_t *parent)
     lv_obj_align(label, LV_ALIGN_CENTER, 0, -150);
     lv_obj_set_style_text_font(label, &lv_font_montserrat_16, 0);
     lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
-    lv_label_set_text(label, "RB 02");
+    lv_label_set_text(label, RB_PRODUCT_TITLE);
     lv_obj_add_style(label, &style_title, LV_STATE_DEFAULT);
   }
 
@@ -4687,7 +4703,7 @@ static void Onboard_create_TurnSlip(lv_obj_t *parent)
     lv_obj_align(label, LV_ALIGN_CENTER, 0, -210);
     lv_obj_set_style_text_font(label, &lv_font_montserrat_16, 0);
     lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
-    lv_label_set_text(label, "RB 02");
+    lv_label_set_text(label, RB_PRODUCT_TITLE);
     lv_obj_add_style(label, &style_title, LV_STATE_DEFAULT);
   }
   if (true)
@@ -4731,7 +4747,7 @@ static void Onboard_create_Variometer(lv_obj_t *parent)
     lv_obj_align(label, LV_ALIGN_CENTER, 0, -200);
     lv_obj_set_style_text_font(label, &lv_font_montserrat_16, 0);
     lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
-    lv_label_set_text(label, "RB 02");
+    lv_label_set_text(label, RB_PRODUCT_TITLE);
     lv_obj_add_style(label, &style_title, LV_STATE_DEFAULT);
   }
 
@@ -5146,7 +5162,7 @@ static void Onboard_create_GMeter(lv_obj_t *parent)
     lv_obj_align(label, LV_ALIGN_CENTER, 0, -200);
     lv_obj_set_style_text_font(label, &lv_font_montserrat_16, 0);
     lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
-    lv_label_set_text(label, "RB 02");
+    lv_label_set_text(label, RB_PRODUCT_TITLE);
     lv_obj_add_style(label, &style_title, LV_STATE_DEFAULT);
   }
 

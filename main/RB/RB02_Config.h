@@ -50,7 +50,7 @@ void RB02_Console_AppendLog(uint8_t sourceId,uint8_t logLevel,const char *string
 
 #define RB02_STRUCTURE_CONFIG 1
 
-
+#ifdef RB_ENABLE_TRK
 typedef struct
 {
     lv_obj_t *Numbers[12];
@@ -59,26 +59,41 @@ typedef struct
     lv_obj_t *parent;
     int16_t AttitudeYawCorrection;
 } RB02_Gyro;
+#endif
 
-
+#ifdef RB_ENABLE_ALT
 typedef struct
 {
     lv_obj_t *labelGPSAltitude;
 } RB02_AltimeterAnalog;
-
+#endif
 
 typedef struct
 {
     lv_obj_t *SettingsSpeedSummary;
     lv_obj_t *SettingsOperativeSummary;
-#ifdef RB_ENABLE_GPS
+#ifdef RB_ENABLE_TRK
     RB02_Gyro Gyro;
 #endif
+#ifdef RB_ENABLE_ALT
     RB02_AltimeterAnalog altimeterAnalog;
+#endif
 #ifdef RB_ENABLE_CONSOLE
     lv_obj_t *console;
 #endif
     lv_obj_t *Loading_slider;
+#ifdef RB_ENABLE_EMS
+    void *ems;
+#endif    
+#ifdef RB_ENABLE_GPS_DIAG
+  lv_obj_t *tGPSDiag;
+#endif
+#ifdef RB_ENABLE_CONSOLE
+  lv_obj_t *tConsole;
+#endif
+#ifdef RB_ENABLE_EMS
+  lv_obj_t *tEMS;
+#endif
 } RB02_UI;
 
 typedef struct

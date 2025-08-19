@@ -2,7 +2,7 @@
  * This file is part of RB.
  *
  * Copyright (C) 2024 XIAPROJECTS SRL
- * 
+ *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as published
  * by the Free Software Foundation, version 3.
@@ -20,7 +20,7 @@
  * 02 -> Display with SixPack
  * 03 -> Display with Autopilot, ADSB, Radio, Flight Computer
  * 04 -> Display with EMS: Engine monitoring system
- * 
+ *
  * Community edition will be free for all builders and personal use as defined by the licensing model
  * Dual licensing for commercial agreement is available
  *
@@ -52,7 +52,7 @@ lv_obj_t *RB02_Checklist_CreateScreen(lv_obj_t *parent, char *path)
 {
 
     FILE *f = fopen(path, "r");
-
+    
     if (f == NULL)
     {
         RB02_Checklist_Addline(parent, "CHECKS\nload your check.txt\nin sdcard");

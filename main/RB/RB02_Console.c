@@ -78,7 +78,7 @@ lv_obj_t *RB02_Console_CreateScreen(lv_obj_t *parent)
         lv_obj_set_style_text_font(label, &lv_font_montserrat_14, 0);
         lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
         lv_obj_set_style_text_color(label, lv_color_white(), 0);
-        lv_label_set_text(label, "RB 02");
+        lv_label_set_text(label, RB_PRODUCT_TITLE);
     }
 
     if (true)
@@ -102,7 +102,7 @@ lv_obj_t *RB02_Console_CreateScreen(lv_obj_t *parent)
         lv_obj_align(label, LV_ALIGN_TOP_MID, 0, 56);
         lv_label_set_long_mode(label, LV_LABEL_LONG_WRAP);
 
-        lv_label_set_text(label, "RB-02 Startup");
+        lv_label_set_text(label, RB_PRODUCT_TITLE " Startup");
 
         singletonConfig()->ui.console = label;
     }
