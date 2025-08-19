@@ -83,21 +83,46 @@ set "TEMPLATE=NONTOUCH-30hz-TRAFFICDIAG-2.8"
 copy /Y main\RB\BuildMachine-Template-RB-02-%TEMPLATE%.h main\RB\BuildMachine.h
 echo #define RB_VERSION "%VERSION%" >> main\RB\BuildMachine.h
 C:\Users\Stefano\.espressif\python_env\idf5.5_py3.11_env\Scripts\python C:\Users\Stefano\esp\v5.5\esp-idf\tools\idf.py app
-move build\RB-02.bin build\RB-%VERSION%\RB-02-%VERSION%-%TEMPLATE%.bin
+move build\RB-02.bin build\RB-%VERSION%\RB-05-%VERSION%-%TEMPLATE%.bin
 
 
 set "TEMPLATE=TOUCH-30hz-TRAFFICDIAG-2.1"
 copy /Y main\RB\BuildMachine-Template-RB-02-%TEMPLATE%.h main\RB\BuildMachine.h
 echo #define RB_VERSION "%VERSION%" >> main\RB\BuildMachine.h
 C:\Users\Stefano\.espressif\python_env\idf5.5_py3.11_env\Scripts\python C:\Users\Stefano\esp\v5.5\esp-idf\tools\idf.py app
-move build\RB-02.bin build\RB-%VERSION%\RB-02-%VERSION%-%TEMPLATE%.bin
+move build\RB-02.bin build\RB-%VERSION%\RB-05-%VERSION%-%TEMPLATE%.bin
 
 
 set "TEMPLATE=TOUCH-30hz-TRAFFICDIAG-2.8"
 copy /Y main\RB\BuildMachine-Template-RB-02-%TEMPLATE%.h main\RB\BuildMachine.h
 echo #define RB_VERSION "%VERSION%" >> main\RB\BuildMachine.h
 C:\Users\Stefano\.espressif\python_env\idf5.5_py3.11_env\Scripts\python C:\Users\Stefano\esp\v5.5\esp-idf\tools\idf.py app
-move build\RB-02.bin build\RB-%VERSION%\RB-02-%VERSION%-%TEMPLATE%.bin
+move build\RB-02.bin build\RB-%VERSION%\RB-05-%VERSION%-%TEMPLATE%.bin
+
+
+
+set "TEMPLATE=NONTOUCH-30hz-TRAFFIC-2.8"
+copy /Y main\RB\BuildMachine-Template-RB-02-%TEMPLATE%.h main\RB\BuildMachine.h
+echo #define RB_VERSION "%VERSION%" >> main\RB\BuildMachine.h
+C:\Users\Stefano\.espressif\python_env\idf5.5_py3.11_env\Scripts\python C:\Users\Stefano\esp\v5.5\esp-idf\tools\idf.py app
+move build\RB-02.bin build\RB-%VERSION%\RB-05-%VERSION%-%TEMPLATE%.bin
+
+
+set "TEMPLATE=TOUCH-30hz-TRAFFIC-2.1"
+copy /Y main\RB\BuildMachine-Template-RB-02-%TEMPLATE%.h main\RB\BuildMachine.h
+echo #define RB_VERSION "%VERSION%" >> main\RB\BuildMachine.h
+C:\Users\Stefano\.espressif\python_env\idf5.5_py3.11_env\Scripts\python C:\Users\Stefano\esp\v5.5\esp-idf\tools\idf.py app
+move build\RB-02.bin build\RB-%VERSION%\RB-05-%VERSION%-%TEMPLATE%.bin
+
+
+set "TEMPLATE=TOUCH-30hz-TRAFFIC-2.8"
+copy /Y main\RB\BuildMachine-Template-RB-02-%TEMPLATE%.h main\RB\BuildMachine.h
+echo #define RB_VERSION "%VERSION%" >> main\RB\BuildMachine.h
+C:\Users\Stefano\.espressif\python_env\idf5.5_py3.11_env\Scripts\python C:\Users\Stefano\esp\v5.5\esp-idf\tools\idf.py app
+move build\RB-02.bin build\RB-%VERSION%\RB-05-%VERSION%-%TEMPLATE%.bin
+
+
+
 
 
 

@@ -1,4 +1,4 @@
-# RB-02
+# RB-Avionics
 The RB is the Open-source Aviation instruments suite, the models are divided by CPU/Features. RB-02 will run in ESP32 (Arduino).
 - RB-01 -> Display with Synthetic vision, Autopilot and ADSB
 - RB-02 -> Display with SixPack (this repo)
@@ -6,11 +6,13 @@ The RB is the Open-source Aviation instruments suite, the models are divided by 
 - RB-04 -> Display with EMS: Engine monitoring system
 - RB-05 -> Display with Stratux BLE Traffic (this repo)
 
+## Community
+The RB Avionics is a complete avionics project which is supported by a huge community worldwide, read the Wiki and if you need support join the Discord channel.
+
 ## How to
-We strongly suggest to install binaries, but if you are trainged, you can built it yourself by following this procedure:
-1) Download the ESP32-S3-Touch-LCD-2.8C-Demo.zip https://files.waveshare.com/wiki/ESP32-S3-Touch-LCD-2.8C/ESP32-S3-Touch-LCD-2.8C-Demo.zip
-2) Overwrite the GIT files
-3) Compile following the official Wiki: https://www.waveshare.com/wiki/ESP32-S3-Touch-LCD-2.8C
+We strongly suggest to install binaries, that are built from building-machine which enrich and check the output.
+Anyway if you are brave enough and you are well trained, you can built it yourself by following this procedure:
+- https://github.com/xiaprojects/rb-esp/wiki/Customisations
 
 
 ### Features
