@@ -1045,7 +1045,7 @@ bool nmea_GGA_mini_parser(const uint8_t *sentence, uint16_t length)
 #endif
 
 #ifdef RB_ENABLE_GPS
-void NMEA_ParseBuffer(uint8_t *data, const int rxBytes, uint8_t SourceId);
+void NMEA_ParseBuffer(const uint8_t *data, const int rxBytes, uint8_t SourceId);
 void uart_fetch_data()
 {
   if (GpsSpeed0ForDisable == 0)
@@ -1056,7 +1056,7 @@ void uart_fetch_data()
   free(data);
 }
 
-void NMEA_ParseBuffer(uint8_t *data, const int rxBytes, uint8_t SourceId)
+void NMEA_ParseBuffer(const uint8_t *data, const int rxBytes, uint8_t SourceId)
 {
 #ifdef RB01_GPS_PROTOCOL_BLE
   if (SourceId == RB01_GPS_PROTOCOL_BLE && singletonConfig()->settingsBluetoothGPS == 0)
@@ -2363,6 +2363,16 @@ void rb_increase_lvgl_tick(lv_timer_t *t)
     }
     break;
 #endif
+#ifdef RB_ENABLE_EMS
+  case RB02_TAB_EMS:
+    if (OperativeWarningVisible == true)
+    {
+      lv_obj_add_flag(OperativeWarning, LV_OBJ_FLAG_HIDDEN);
+      OperativeWarningVisible = false;
+    }
+    RB04_EMS_Tick(singletonConfig()->ui.ems);
+    break;
+#endif
 #ifdef RB_ENABLE_MAP
   case RB02_TAB_MAP:
 #ifdef RB_ENABLE_GPS
@@ -2603,6 +2613,11 @@ void rb_increase_lvgl_tick(lv_timer_t *t)
 
   case RB02_TAB_SET:
   {
+    if (OperativeWarningVisible == true)
+    {
+      lv_obj_add_flag(OperativeWarning, LV_OBJ_FLAG_HIDDEN);
+      OperativeWarningVisible = false;
+    }
     char buf[4 + 4 + 4 + 4 + 4 + 4 + 22];
     sprintf(buf, "AX:%2.1f AY:%2.1f AZ:%2.1f GX:%2.1f GY:%2.1f GZ:%2.1f",
             Accel.x,
@@ -2903,6 +2918,28 @@ static void actionInTab(touchLocation location)
     case RB02_TOUCH_S:
       RB05_Radar_Touch_S(&singletonConfig()->trafficStatus);
       break;
+    default:
+      break;
+    }
+    break;
+#endif
+#ifdef RB_ENABLE_EMS
+  case RB02_TAB_EMS:
+    switch (location)
+    {
+    case RB02_TOUCH_N:
+      RB04_EMS_Touch_N(singletonConfig()->ui.ems);
+      break;
+    case RB02_TOUCH_S:
+      RB04_EMS_Touch_S(singletonConfig()->ui.ems);
+      break;
+    case RB02_TOUCH_E:
+      RB04_EMS_Touch_E(singletonConfig()->ui.ems);
+      break;
+    case RB02_TOUCH_W:
+      RB04_EMS_Touch_W(singletonConfig()->ui.ems);
+      break;
+
     default:
       break;
     }
