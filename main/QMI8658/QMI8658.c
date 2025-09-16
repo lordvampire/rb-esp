@@ -66,6 +66,8 @@ IMUdata AccelFiltered;
 IMUdata AccelFilteredMax;
 IMUdata GyroFiltered;
 IMUdata GyroBias;
+
+IMUdata PanelAlignment;
 // 1.1.30 HW Calibration IMUdata GyroCalibration;
 // Adjustable parameter: lower = slower yaw correction
 #define YAW_CORRECTION_GAIN 0.01f
@@ -605,6 +607,25 @@ float unwrapAngle(float prev, float current)
     return delta;
 }
 
+// Attitude Panel Pitch Alignment Temporary workaround for demo #85
+void compensate_pitch_down45(IMUdata aS, IMUdata *aB_out,IMUdata ref){
+    // pitch down 45° -> we use pitch = -45 degrees
+    float p = ref.x * DEG2RAD;
+    float cp = cosf(p), sp = sinf(p);
+
+
+    // R = Ry(p) (since roll=yaw=0)
+    float R[3][3] = {
+        { cp, 0.0f, sp },
+        { 0.0f, 1.0f, 0.0f },
+        { -sp, 0.0f, cp }
+    };
+
+    aB_out->x = R[0][0]*aS.x + R[0][1]*aS.y + R[0][2]*aS.z;
+    aB_out->y = R[1][0]*aS.x + R[1][1]*aS.y + R[1][2]*aS.z;
+    aB_out->z = R[2][0]*aS.x + R[2][1]*aS.y + R[2][2]*aS.z;
+}
+
 void getAttitude(void)
 {
     /*
@@ -630,6 +651,8 @@ void getAttitude(void)
         // GY <= GZ
         // GZ <= -GX
         // float DEG2RAD = 3.14159265359f / 180.0f;
+        IMUdata panelMountAccel = AccelFiltered;
+        compensate_pitch_down45(AccelFiltered, &panelMountAccel,PanelAlignment);
 
         // Example: convert gyro values
         float gz_rad = (GyroFiltered.z + GyroBias.z) * DEG2RAD;
@@ -638,9 +661,9 @@ void getAttitude(void)
         // No interference between axis but Q output Roll and Pitch output are swapped
 
         Madgwick_UpdateIMU(gy_rad, gz_rad, gx_rad,
-                           AccelFiltered.y - GPSLateralYAcceleration,                // ROLL
-                           AccelFiltered.z - GPSAccelerationForAttitudeCompensation, // PITCH
-                           AccelFiltered.x                                           // YAW
+                           panelMountAccel.y - GPSLateralYAcceleration,                // ROLL
+                           panelMountAccel.z - GPSAccelerationForAttitudeCompensation, // PITCH
+                           panelMountAccel.x                                           // YAW
         );
 
         // Official setup not working

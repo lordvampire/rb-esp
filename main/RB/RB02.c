@@ -192,6 +192,9 @@ extern float GPSAccelerationForAttitudeCompensation;
 bool GPSAccelerationForAttitudeCompensationEnabled = true;
 uint8_t EnableAttitudeMadgwick = 1;
 
+// Attitude Panel Pitch Alignment Temporary workaround for demo #85
+extern IMUdata PanelAlignment;
+
 // DEFINES
 #define RB02_TOUCH_SECTION 3
 #define RB02_TOUCH_SECTION_SIZE 160
@@ -1335,6 +1338,9 @@ void nvsRestoreGMeter()
 #ifdef RB_ENABLE_CONSOLE_DEBUG
     printf("Gyro Calibration %.1f %.1f %.1f\n", singletonConfig()->GyroHardwareCalibration.x, singletonConfig()->GyroHardwareCalibration.z, singletonConfig()->GyroHardwareCalibration.z);
 #endif
+
+    nvs_get_i16(my_handle, "panAZ", &compBuffer);
+    PanelAlignment.x = compBuffer / (RB_GYRO_CALIBRATION_PRECISION / 2.0);
 
     gyroHardwareSetCalibration(GyroFiltered.x, GyroFiltered.y, GyroFiltered.z);
 

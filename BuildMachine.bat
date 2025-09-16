@@ -10,7 +10,7 @@ set "IDF_PYTHON_ENV_PATH=C:\Users\Stefano\.espressif\python_env\idf5.5_py3.11_en
 for /f "delims=" %%i in ('git describe --tags') do set VERSION=%%i
 md build\RB-%VERSION%
 
-
+cmake -G Ninja -DPYTHON_DEPS_CHECKED=1 -DPYTHON=C:\Users\Stefano\.espressif\python_env\idf5.5_py3.11_env\Scripts\python.exe -DESP_PLATFORM=1 -DIDF_TARGET=esp32s3 -DCCACHE_ENABLE=0 C:\Users\Stefano\Desktop\RB-02
 
 set "TEMPLATE=NONTOUCH-30hz-GPS-2.8-AAT"
 copy /Y main\RB\BuildMachine-Template-RB-02-%TEMPLATE%.h main\RB\BuildMachine.h
@@ -123,7 +123,25 @@ move build\RB-02.bin build\RB-%VERSION%\RB-05-%VERSION%-%TEMPLATE%.bin
 
 
 
+set "TEMPLATE=NONTOUCH-30hz-EMS-2.8"
+copy /Y main\RB\BuildMachine-Template-RB-02-%TEMPLATE%.h main\RB\BuildMachine.h
+echo #define RB_VERSION "%VERSION%" >> main\RB\BuildMachine.h
+C:\Users\Stefano\.espressif\python_env\idf5.5_py3.11_env\Scripts\python C:\Users\Stefano\esp\v5.5\esp-idf\tools\idf.py app
+move build\RB-02.bin build\RB-%VERSION%\RB-04-%VERSION%-%TEMPLATE%.bin
 
+
+set "TEMPLATE=TOUCH-30hz-EMS-2.1"
+copy /Y main\RB\BuildMachine-Template-RB-02-%TEMPLATE%.h main\RB\BuildMachine.h
+echo #define RB_VERSION "%VERSION%" >> main\RB\BuildMachine.h
+C:\Users\Stefano\.espressif\python_env\idf5.5_py3.11_env\Scripts\python C:\Users\Stefano\esp\v5.5\esp-idf\tools\idf.py app
+move build\RB-02.bin build\RB-%VERSION%\RB-04-%VERSION%-%TEMPLATE%.bin
+
+
+set "TEMPLATE=TOUCH-30hz-EMS-2.8"
+copy /Y main\RB\BuildMachine-Template-RB-02-%TEMPLATE%.h main\RB\BuildMachine.h
+echo #define RB_VERSION "%VERSION%" >> main\RB\BuildMachine.h
+C:\Users\Stefano\.espressif\python_env\idf5.5_py3.11_env\Scripts\python C:\Users\Stefano\esp\v5.5\esp-idf\tools\idf.py app
+move build\RB-02.bin build\RB-%VERSION%\RB-04-%VERSION%-%TEMPLATE%.bin
 
 
 
