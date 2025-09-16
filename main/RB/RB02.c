@@ -21,6 +21,7 @@
  * 03 -> Display with Autopilot, ADSB, Radio, Flight Computer
  * 04 -> Display with EMS: Engine monitoring system
  * 05 -> Display with Stratux BLE Traffic
+ * 06 -> Display with Android 6.25" 7" 8" 10" 10.2"
  *
  * Community edition will be free for all builders and personal use as defined by the licensing model
  * Dual licensing for commercial agreement is available
@@ -167,7 +168,7 @@ extern float GFactorMin;
 extern uint8_t GFactorDirty;
 extern int32_t bmp280Pressure;
 extern int32_t Variometer;
-
+double fabs(double x);
 /* 1.0.9 For future compatibility imported NMEA ESP32 Example header */
 #define CONFIG_NMEA_PARSER_RING_BUFFER_SIZE 2048
 #define CONFIG_NMEA_PARSER_TASK_STACK_SIZE 4 * 1024
@@ -200,20 +201,16 @@ uint8_t EnableAttitudeMadgwick = 1;
 #define BMP280_S64_t int64_t
 #define BMP280_U32_t uint32_t
 #define BMP280_S32_t int32_t
-#ifdef RB_ENABLE_GPS
-static const int RX_BUF_SIZE = 1024;
-#define TXD_PIN (GPIO_NUM_43)
-#define RXD_PIN (GPIO_NUM_44)
-#define UART_N UART_NUM_1
-#endif
+
 // Prototype declaration
 void lvgl_register_sdcard_fs();
 static lv_obj_t *Onboard_create_Base(lv_obj_t *parent, const lv_img_dsc_t *backgroundImage);
 #ifdef RB_ENABLE_SPD
 static void Onboard_create_Speed(lv_obj_t *parent);
 #endif
+#ifdef RB_ENABLE_ATT
 static void Onboard_create_Attitude(lv_obj_t *parent);
-
+#endif
 static void Onboard_create_AltimeterDigital(lv_obj_t *parent);
 static void Onboard_create_TurnSlip(lv_obj_t *parent);
 static void Onboard_create_Clock(lv_obj_t *parent);
@@ -234,7 +231,7 @@ void update_Vibration_lvgl_tick(lv_timer_t *t);
 void update_Clock_lvgl_tick(lv_timer_t *t);
 void update_AltimeterDigital_lvgl_tick(lv_timer_t *t);
 void update_Altimeter_lvgl_tick(lv_timer_t *t);
-#ifdef RB_ENABLE_GPS
+#ifdef RB_ENABLE_UART
 void uart_fetch_data();
 #endif
 void nvsStorePCal();
@@ -523,7 +520,7 @@ void RB02_Example1(void)
   lvTabSplashScreen = ts;
 #endif
 #ifdef RB_ENABLE_EMS
-    singletonConfig()->ui.tEMS = lv_tabview_add_tab(tv, "EMS");
+  singletonConfig()->ui.tEMS = lv_tabview_add_tab(tv, "EMS");
 #endif
 #ifdef ENABLE_DEMO_SCREENS
   lv_obj_t *tu = lv_tabview_add_tab(tv, "SynthSide");
@@ -861,6 +858,13 @@ void nmea_RMC_UpdatedValueFor(uint8_t csvCounter, int32_t finalNumber, uint8_t d
     break;
   case 4: // N
     /* code */
+    {
+      char c = finalNumber + '0';
+      if (c == 'S')
+      {
+        singletonConfig()->NMEA_DATA.latitude = -fabs(singletonConfig()->NMEA_DATA.latitude);
+      }
+    }
     break;
   case 5: // 01208.18660
     /* code */
@@ -871,6 +875,13 @@ void nmea_RMC_UpdatedValueFor(uint8_t csvCounter, int32_t finalNumber, uint8_t d
     break;
   case 6: // E
     /* code */
+    {
+      char c = finalNumber + '0';
+      if (c == 'W')
+      {
+        singletonConfig()->NMEA_DATA.longitude = -fabs(singletonConfig()->NMEA_DATA.longitude);
+      }
+    }
     break;
   case 7: // Speed KT
     singletonConfig()->NMEA_DATA.speed = conversionValue * 1.852;
@@ -1046,15 +1057,25 @@ bool nmea_GGA_mini_parser(const uint8_t *sentence, uint16_t length)
 
 #ifdef RB_ENABLE_GPS
 void NMEA_ParseBuffer(const uint8_t *data, const int rxBytes, uint8_t SourceId);
+#ifdef RB_ENABLE_UART
 void uart_fetch_data()
 {
   if (GpsSpeed0ForDisable == 0)
     return;
-  uint8_t *data = (uint8_t *)malloc(RX_BUF_SIZE + 1);
-  const int rxBytes = uart_read_bytes(UART_N, data, RX_BUF_SIZE, 10 / portTICK_PERIOD_MS);
-  NMEA_ParseBuffer(data, rxBytes, RB01_GPS_PROTOCOL_UART);
+  uint8_t *data = (uint8_t *)malloc(UART_RX_BUF_SIZE + 1);
+  if (data == NULL)
+  {
+    return;
+  }
+  const int rxBytes = uart_read_bytes(UART_N, data, UART_RX_BUF_SIZE, 10 / portTICK_PERIOD_MS);
+  if (rxBytes > 1)
+  {
+    data[rxBytes] = 0;
+    NMEA_ParseBuffer(data, rxBytes, RB01_GPS_PROTOCOL_UART);
+  }
   free(data);
 }
+#endif
 
 void NMEA_ParseBuffer(const uint8_t *data, const int rxBytes, uint8_t SourceId)
 {
@@ -1073,7 +1094,7 @@ void NMEA_ParseBuffer(const uint8_t *data, const int rxBytes, uint8_t SourceId)
 
   if (rxBytes > 0)
   {
-    data[rxBytes] = 0;
+    // data[rxBytes] = 0;
     /*
     printf("UART[%d]=", rxBytes);
     data[rxBytes] = 0;
@@ -1444,6 +1465,10 @@ void nvsStoreGyroCalibration()
     nvs_set_i16(my_handle, "calGY", calBuffer);
     calBuffer = singletonConfig()->GyroHardwareCalibration.z * RB_GYRO_CALIBRATION_PRECISION;
     nvs_set_i16(my_handle, "calGZ", calBuffer);
+
+    calBuffer = PanelAlignment.x * (RB_GYRO_CALIBRATION_PRECISION / 2.0);
+    nvs_set_i16(my_handle, "panAZ", calBuffer);
+
     nvs_close(my_handle);
   }
 }
@@ -1880,6 +1905,7 @@ void uartApplyRates()
 #endif
   if (GpsSpeed0ForDisable > 0)
   {
+#ifdef RB_ENABLE_UART
     // 1.0.9 Enable UART for NMEA GPS Input
     const uart_config_t uart_config = {
         .baud_rate = GpsSpeed0ForDisable, // TODO: Delay the setup up to the LVGL started
@@ -1891,6 +1917,7 @@ void uartApplyRates()
     };
     // Setup Baud Rate
     uart_param_config(1, &uart_config);
+#endif
   }
   else
   {
@@ -2036,9 +2063,8 @@ void RB02_CreateScreens()
   lv_obj_add_event_cb(singletonConfig()->ui.Gyro.parent, speedBgClicked, LV_EVENT_CLICKED, NULL);
 #endif
 
-
 #ifdef RB_ENABLE_EMS
-  RB04_EMS_CreateScreen(singletonConfig()->ui.tEMS,singletonConfig());
+  RB04_EMS_CreateScreen(singletonConfig()->ui.tEMS, singletonConfig());
   lv_obj_add_event_cb(singletonConfig()->ui.tEMS, speedBgClicked, LV_EVENT_CLICKED, NULL);
 #endif
 }
@@ -2098,7 +2124,7 @@ void rb_increase_lvgl_tick(lv_timer_t *t)
       break;
     case 3:
       gyroHardwareCalibrationToZero();
-    break;
+      break;
     case 35:
       LCD_Backlight = Backlight_MAX;
       Set_Backlight(LCD_Backlight);
@@ -2110,13 +2136,13 @@ void rb_increase_lvgl_tick(lv_timer_t *t)
       RB02_CreateScreens();
       break;
     case 31:
-    break;
+      break;
     case 32:
-    break;
+      break;
     case 33:
-    break;
+      break;
     case 34:
-    break;
+      break;
     case 6:
       bmp280Setup();
       break;
@@ -2268,7 +2294,7 @@ void rb_increase_lvgl_tick(lv_timer_t *t)
 
 #ifdef RB_ENABLE_AAT
   case RB02_TAB_AAT:
-#ifdef RB_ENABLE_GPS
+#ifdef RB_ENABLE_UART
     uart_fetch_data();
 #endif
     RB02_AdvancedAttitude_Tick(&advancedAttitude_Status, &singletonConfig()->NMEA_DATA, Altimeter, QNH, Variometer);
@@ -2341,7 +2367,7 @@ void rb_increase_lvgl_tick(lv_timer_t *t)
 
 #ifdef RB_ENABLE_SPD
   case RB02_TAB_SPD:
-#ifdef RB_ENABLE_GPS
+#ifdef RB_ENABLE_UART
     uart_fetch_data();
 #endif
     update_Speed_lvgl_tick(t);
@@ -2375,7 +2401,7 @@ void rb_increase_lvgl_tick(lv_timer_t *t)
 #endif
 #ifdef RB_ENABLE_MAP
   case RB02_TAB_MAP:
-#ifdef RB_ENABLE_GPS
+#ifdef RB_ENABLE_UART
     uart_fetch_data();
 #endif
     RB02_GPSMap_Tick(&singletonConfig()->gpsMapStatus, &singletonConfig()->NMEA_DATA, t0);
@@ -2399,7 +2425,7 @@ void rb_increase_lvgl_tick(lv_timer_t *t)
 #endif
 #ifdef RB_ENABLE_TRK
   case RB02_TAB_TRK:
-#ifdef RB_ENABLE_GPS
+#ifdef RB_ENABLE_UART
     uart_fetch_data();
 #endif
     bool GyroWillUseTheGPS = false;
@@ -2489,7 +2515,7 @@ void rb_increase_lvgl_tick(lv_timer_t *t)
 #ifdef RB_ENABLE_ALD
   case RB02_TAB_ALD:
     // 1.1.17 Add GPS Altimeter
-#ifdef RB_ENABLE_GPS
+#ifdef RB_ENABLE_UART
     uart_fetch_data();
 #endif
     update_AltimeterDigital_lvgl_tick(t);
@@ -2515,7 +2541,9 @@ void rb_increase_lvgl_tick(lv_timer_t *t)
   case RB02_TAB_ATT:
     if (GPSAccelerationForAttitudeCompensationEnabled == true)
     {
+#ifdef RB_ENABLE_UART
       uart_fetch_data();
+#endif
     }
     update_Attitude_lvgl_tick(t);
 
@@ -2595,7 +2623,7 @@ void rb_increase_lvgl_tick(lv_timer_t *t)
 
 #ifdef VIBRATION_TEST
   case RB02_TAB_VBR:
-#ifdef RB_ENABLE_GPS
+#ifdef RB_ENABLE_UART
     uart_fetch_data();
 #endif
 
@@ -2604,7 +2632,7 @@ void rb_increase_lvgl_tick(lv_timer_t *t)
 #endif
 #ifdef RB_ENABLE_CLK
   case RB02_TAB_CLK:
-#ifdef RB_ENABLE_GPS
+#ifdef RB_ENABLE_UART
     uart_fetch_data();
 #endif
     update_Clock_lvgl_tick(t);
@@ -2631,9 +2659,9 @@ void rb_increase_lvgl_tick(lv_timer_t *t)
             AccelFiltered.x,
             AccelFiltered.y,
             AccelFiltered.z,
-            GyroFiltered.x + GyroBias.x ,
-            GyroFiltered.y + GyroBias.y ,
-            GyroFiltered.z + GyroBias.z );
+            GyroFiltered.x + GyroBias.x,
+            GyroFiltered.y + GyroBias.y,
+            GyroFiltered.z + GyroBias.z);
     lv_label_set_text(SettingStatus1, buf);
 
     sprintf(buf, "R:%2.1f P:%2.1f T:%2.1f",
@@ -2670,7 +2698,7 @@ void rb_increase_lvgl_tick(lv_timer_t *t)
     snprintf(buf, sizeof(buf), "Operative BMP:%d GPS:%d ATT:%d BT:%d", Operative_BMP280, Operative_GPS, Operative_Attitude, opBt);
     lv_label_set_text(singletonConfig()->ui.SettingsOperativeSummary, buf);
 
-#ifdef RB_ENABLE_GPS
+#ifdef RB_ENABLE_UART
     uart_fetch_data();
 #endif
   }
@@ -2768,9 +2796,9 @@ static void mbox1_cage_event_cb(lv_event_t *e)
       if (strcmp("CAGE", txt) == 0)
       {
         // TODO: make an avg
-        GyroBias.x = -GyroFiltered.x ;
-        GyroBias.y = -GyroFiltered.y ;
-        GyroBias.z = -GyroFiltered.z ;
+        GyroBias.x = -GyroFiltered.x;
+        GyroBias.y = -GyroFiltered.y;
+        GyroBias.z = -GyroFiltered.z;
 
         rb_check_attitude_inop();
       }
@@ -5510,17 +5538,17 @@ void update_Vibration_lvgl_tick(lv_timer_t *t)
   char buf[100];
   lv_obj_set_pos(Screen_Vibration_GPSAccel_Ball, -220 * GPSLateralYAcceleration / GMeterScale, 220 * GPSAccelerationForAttitudeCompensation / GMeterScale);
   lv_obj_set_pos(Screen_Vibration_Accel_Ball, -220 * AccelFiltered.y / GMeterScale, 220 * AccelFiltered.x / GMeterScale);
-  lv_obj_set_pos(Screen_GMeter_BallGyro, 220 * (GyroFiltered.z + GyroBias.z ) / GMeterScaleGyro, 220 * (GyroFiltered.y + GyroBias.y ) / GMeterScaleGyro);
-  lv_obj_set_pos(Screen_Vibration_Yaw_Ball, -220 * (GyroFiltered.x + GyroBias.x ) / GMeterScaleGyro, 220 * AccelFiltered.z / GMeterScale);
-  snprintf(buf, sizeof(buf), "%2.0f %2.0f %2.0f", (GyroFiltered.x + GyroBias.x), (GyroFiltered.y + GyroBias.y ), (GyroFiltered.z + GyroBias.z ));
+  lv_obj_set_pos(Screen_GMeter_BallGyro, 220 * (GyroFiltered.z + GyroBias.z) / GMeterScaleGyro, 220 * (GyroFiltered.y + GyroBias.y) / GMeterScaleGyro);
+  lv_obj_set_pos(Screen_Vibration_Yaw_Ball, -220 * (GyroFiltered.x + GyroBias.x) / GMeterScaleGyro, 220 * AccelFiltered.z / GMeterScale);
+  snprintf(buf, sizeof(buf), "%2.0f %2.0f %2.0f", (GyroFiltered.x + GyroBias.x), (GyroFiltered.y + GyroBias.y), (GyroFiltered.z + GyroBias.z));
   lv_label_set_text(GMeterLabelGyro, buf);
 
   if (GMeterScaleGyro < GyroFiltered.y)
-    GMeterScaleGyro = (GyroFiltered.y + GyroBias.y );
+    GMeterScaleGyro = (GyroFiltered.y + GyroBias.y);
   if (GMeterScaleGyro < GyroFiltered.x)
-    GMeterScaleGyro = (GyroFiltered.x + GyroBias.x );
+    GMeterScaleGyro = (GyroFiltered.x + GyroBias.x);
   if (GMeterScaleGyro < GyroFiltered.z)
-    GMeterScaleGyro = (GyroFiltered.z + GyroBias.z );
+    GMeterScaleGyro = (GyroFiltered.z + GyroBias.z);
 
   snprintf(buf, sizeof(buf), "%.1f %.1f %.1f", AccelFiltered.x, AccelFiltered.y, AccelFiltered.z);
   lv_label_set_text(Screen_Vibration_Accel_Label, buf);
