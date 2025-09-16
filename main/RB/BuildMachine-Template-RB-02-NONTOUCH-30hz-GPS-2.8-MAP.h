@@ -4,3 +4,4 @@
 #define RB_ENABLE_MAP 1
 #define RB_02_ENABLE_EXTERNALMAP 1
 #define RB_ENABLE_GPS 1
+#define RB_ENABLE_UART 1

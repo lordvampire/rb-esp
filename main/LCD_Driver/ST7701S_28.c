@@ -38,7 +38,7 @@ ST7701S_handle ST7701S_newObject(int SDA, int SCL, int CS, char channel_select, 
 
         st7701s_handle->st7701s_protocol_config_t.command_bits = 1;
         st7701s_handle->st7701s_protocol_config_t.address_bits = 8;
-        st7701s_handle->st7701s_protocol_config_t.clock_speed_hz = 40000000;
+        st7701s_handle->st7701s_protocol_config_t.clock_speed_hz = 4000000;
         st7701s_handle->st7701s_protocol_config_t.mode = 0;
         st7701s_handle->st7701s_protocol_config_t.spics_io_num = CS;
         st7701s_handle->st7701s_protocol_config_t.queue_size = 1;
@@ -378,22 +378,22 @@ void ST7701S_WriteData(ST7701S_handle St7701S_handle, uint8_t data)
 esp_err_t ST7701S_reset(void)
 {
     Set_EXIO(TCA9554_EXIO1,false);
-    vTaskDelay(pdMS_TO_TICKS(10));
+    vTaskDelay(pdMS_TO_TICKS(50));
     Set_EXIO(TCA9554_EXIO1,true);
-    vTaskDelay(pdMS_TO_TICKS(10));
+    vTaskDelay(pdMS_TO_TICKS(100));
     return ESP_OK;
 }
 
 esp_err_t ST7701S_CS_EN(void)
 {
     Set_EXIO(TCA9554_EXIO3,false);
-    vTaskDelay(pdMS_TO_TICKS(10));
+    vTaskDelay(pdMS_TO_TICKS(50));
     return ESP_OK;
 }
 esp_err_t ST7701S_CS_Dis(void)
 {
     Set_EXIO(TCA9554_EXIO3,true);
-    vTaskDelay(pdMS_TO_TICKS(10));
+    vTaskDelay(pdMS_TO_TICKS(50));
     return ESP_OK;
 }
 
@@ -441,7 +441,7 @@ void LCD_Init(void)
         .psram_trans_align = 64,
         .num_fbs = EXAMPLE_LCD_NUM_FB,
 #if CONFIG_EXAMPLE_USE_BOUNCE_BUFFER
-        .bounce_buffer_size_px = 20 * EXAMPLE_LCD_H_RES,
+        .bounce_buffer_size_px = 10 * EXAMPLE_LCD_H_RES,
 #endif
         .clk_src = LCD_CLK_SRC_DEFAULT,
         .disp_gpio_num = EXAMPLE_PIN_NUM_DISP_EN,

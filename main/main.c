@@ -102,7 +102,14 @@ void Driver_Init(void)
     PCF85063_Init();
     QMI8658_Init();
     EXIO_Init(); // Example Initialize EXIO
-
+/*
+    // Keep the LCD under reset after Expander has being init
+    vTaskDelay(pdMS_TO_TICKS(100));
+    // Black screen issue keep under reset the panel
+    Set_EXIO(TCA9554_EXIO1, false);
+    Set_EXIO(TCA9554_EXIO2, false);
+    vTaskDelay(pdMS_TO_TICKS(1000));
+*/
 #ifdef RB02_ESP_BLUETOOTH
     //if (RB02_Config_NVS_Get_BluetoothSettings() != 0)
     {
@@ -120,9 +127,9 @@ void Driver_Init(void)
         0);
 }
 void RB02_Main();
+void Set_Backlight(uint8_t Light);
 void app_main(void)
 {
-
     // Initialize NVS.
     esp_err_t ret = nvs_flash_init();
     if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND)
@@ -131,12 +138,14 @@ void app_main(void)
         ret = nvs_flash_init();
     }
     Driver_Init();
-
+    
+#ifdef RB_ENABLE_UART
     // 1.0.9
     // Install the UART Driver as soon as possible
-    uart_driver_install(1, 256, 0, 0, NULL, 0);
+    uart_driver_install(UART_N, 256, 0, 0, NULL, 0);
     // Set PIN for Waveshare 2.8" Round based on Wiki Schematics
-    uart_set_pin(1, UART_PIN_NO_CHANGE, GPIO_NUM_44, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
+    uart_set_pin(1, UART_PIN_NO_CHANGE, RXD_PIN, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
+#endif
 
     LCD_Init();
 // 1.1.23 Add non touch unified official support
@@ -147,7 +156,17 @@ void app_main(void)
     LVGL_Init();
     /********************* Demo *********************/
     // Lvgl_Example1();
-    RB02_Main();
+    //
+    if (false) // Display test minimal routine
+    {
+
+        Set_Backlight(100);
+        lv_obj_set_style_bg_color(lv_scr_act(), lv_color_make(255, 0, 0), 0);
+    }
+    else
+    {
+        RB02_Main();
+    }
     // lv_demo_widgets();
     // lv_demo_keypad_encoder();
     // lv_demo_benchmark();

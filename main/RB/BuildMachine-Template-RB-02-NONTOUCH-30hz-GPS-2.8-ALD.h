@@ -3,3 +3,4 @@
 #define RB_PRODUCT_LINE 2
 #define RB_ENABLE_ALD 1
 #define RB_ENABLE_GPS 1
+#define RB_ENABLE_UART 1
