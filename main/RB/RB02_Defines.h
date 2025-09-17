@@ -116,6 +116,13 @@
 #define RB01_GPS_PROTOCOL RB01_GPS_PROTOCOL_BLE
 #endif
 
+#ifdef RB_ENABLE_GPS
+#define UART_RX_BUF_SIZE 1024
+#define TXD_PIN (GPIO_NUM_43)
+#define RXD_PIN (GPIO_NUM_44)
+#define UART_N UART_NUM_1
+#endif
+
 // 1.1.19 Starting getting rid of demo screens
 // #define ENABLE_DEMO_SCREENS 1
 //#define VIBRATION_TEST 1

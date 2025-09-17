@@ -94,11 +94,12 @@ typedef struct
 #ifdef RB_ENABLE_EMS
   lv_obj_t *tEMS;
 #endif
+    lv_obj_t *panelMountAlignmentLabelPitch;
 } RB02_UI;
 
 typedef struct
 {
-    IMUdata GyroHardwareCalibration;
+    IMUdata GyroHardwareCalibration;  
     uint8_t settingsCalibrateOnBoot;
 #ifdef RB02_ESP_BLUETOOTH
     uint8_t settingsBluetoothEnabled;

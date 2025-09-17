@@ -26,6 +26,7 @@
  *
 */
 #include "RB02_Altimeter.h"
+#ifdef RB_ENABLE_ALT
 #include "RB02_GUIHelpers.h"
 #include "RB02_Config.h"
 #include <stdio.h>
@@ -108,3 +109,5 @@ lv_obj_t *RB02_Altimeter_CreateScreen(lv_obj_t *parent)
     }
     return NULL;
 }
+
+#endif
