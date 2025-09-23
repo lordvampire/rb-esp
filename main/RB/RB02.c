@@ -1170,7 +1170,7 @@ void NMEA_ParseBuffer(const uint8_t *data, const int rxBytes, uint8_t SourceId)
     int64_t now = esp_timer_get_time();
     int64_t isGPSTimeout = (now - GPSLastSpeedKmhReceivedTick);
     int16_t isGPSTimeoutDeciseconds = isGPSTimeout / 100000;
-    snprintf((char *)data, RX_BUF_SIZE, "Parsed: %d %d %.1f %.1f %1.f", isGPSTimeoutDeciseconds, singletonConfig()->NMEA_DATA.valid, singletonConfig()->NMEA_DATA.speed, singletonConfig()->NMEA_DATA.cog, singletonConfig()->NMEA_DATA.altitude);
+    snprintf((char *)data, UART_RX_BUF_SIZE, "Parsed: %d %d %.1f %.1f %1.f", isGPSTimeoutDeciseconds, singletonConfig()->NMEA_DATA.valid, singletonConfig()->NMEA_DATA.speed, singletonConfig()->NMEA_DATA.cog, singletonConfig()->NMEA_DATA.altitude);
     lv_label_set_text(GPSDiag_NMEADebugSummary, (char *)(data));
   }
 #endif
@@ -2621,7 +2621,7 @@ void rb_increase_lvgl_tick(lv_timer_t *t)
 #endif
 #ifdef RB_ENABLE_GPS_DIAG
   case RB02_TAB_GDG:
-#ifdef RB_ENABLE_GPS
+#ifdef RB_ENABLE_UART
     uart_fetch_data();
 #endif
     break;

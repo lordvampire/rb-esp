@@ -1,9 +1,9 @@
 #include "madgwick.h"
 #include <math.h>
 extern float AttitudeBalanceAlpha;
-static float q0 = 1.0f, q1 = 0.0f, q2 = 0.0f, q3 = 0.0f;  // Quaternion
+float q0 = 1.0f, q1 = 0.0f, q2 = 0.0f, q3 = 0.0f;  // Quaternion
 //static float beta = 0.1f;        // 2 * proportional gain
-static float invSampleFreq = 0.03f;  // 1 / sample frequency (100 Hz default)
+float invSampleFreq = 0.01f;  // 1 / sample frequency (100 Hz default)
 
 void Madgwick_Init(float sampleFreq, float betaInit) {
     //beta = betaInit;
