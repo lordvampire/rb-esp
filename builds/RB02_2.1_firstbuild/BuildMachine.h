@@ -1,0 +1,27 @@
+#define RB_02_DISPLAY_TOUCH 1
+#define RB_02_DISPLAY_SIZE RB_02_DISPLAY_21
+#define RB_ENABLE_MAP 1
+#define VIBRATION_TEST 1
+#define RB_ENABLE_SPD 1
+// Apologies to shrink the partition we will not have anymore the old style attitude indicator
+// #define RB_ENABLE_ATT 1
+#define RB_ENABLE_AAT 1
+#define RB_ENABLE_ALT 1
+#define RB_ENABLE_ALD 1
+#define RB_ENABLE_TRN 1
+#define RB_ENABLE_TRK 1
+#define RB_ENABLE_VAR 1
+#define RB_ENABLE_GMT 1
+#define RB_ENABLE_CLK 1
+#define RB_ENABLE_MAP 1
+#define RB_02_ENABLE_EXTERNALMAP 1
+#define RB_ENABLE_CHECKLIST 1
+#define RB_ENABLE_GPS 1
+
+#define RB_LICENSE_TYPE RB_LICENSE_TYPE_COMMUNITY
+#define RB_PRODUCT_LINE 2
+#define RB_ENABLE_CONSOLE 1
+
+
+
+#define RB_VERSION "CUSTOM BUILD" 

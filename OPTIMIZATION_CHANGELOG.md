@@ -6,15 +6,17 @@ This document tracks all optimization implementations and their corresponding bu
 
 ## Version 1.0 - Optimized (2025-10-02)
 
-### Build Location
-📦 `builds/v1.0-optimized-2025-10-02/`
+### Build Information
+- **Display:** 2.1" Round Touch LCD (ESP32-S3-Touch-LCD-2.1)
+- **Configuration:** RB02_Faruk_2.1
+- **Build Location:** 📦 `builds/v1.0-optimized-RB02_Faruk_2.1-2025-10-02/`
 
 ### Flash Command
 ```bash
 esptool.py --chip esp32s3 --baud 921600 write_flash -z \
-  0x0 builds/v1.0-optimized-2025-10-02/bootloader.bin \
-  0x8000 builds/v1.0-optimized-2025-10-02/partition-table.bin \
-  0x10000 builds/v1.0-optimized-2025-10-02/ESP32-S3-Touch-LCD-2.8C-Test.bin
+  0x0 builds/v1.0-optimized-RB02_Faruk_2.1-2025-10-02/bootloader.bin \
+  0x8000 builds/v1.0-optimized-RB02_Faruk_2.1-2025-10-02/partition-table.bin \
+  0x10000 builds/v1.0-optimized-RB02_Faruk_2.1-2025-10-02/RB02_Faruk_2.1.bin
 ```
 
 ### Implemented Optimizations
@@ -83,13 +85,14 @@ esptool.py --chip esp32s3 --baud 921600 write_flash -z \
 - ✅ Sensors: IMU, GPS, Barometer operational
 - ✅ Attitude Display: Improved stability and accuracy
 
-### Build Information
+### Build Details
 
 - **Date:** October 2, 2025
 - **Compiler:** ESP-IDF 5.5.1+
-- **Target:** ESP32-S3
+- **Target:** ESP32-S3 (2.1" Round Touch Display)
+- **Project Name:** RB02_Faruk_2.1
 - **Flash Size:** 16MB
-- **Binary Size:** 1.85MB
+- **Binary Size:** 1.85MB (`RB02_Faruk_2.1.bin`)
 - **Bootloader:** 21KB
 - **Partition Table:** 3KB
 
@@ -120,11 +123,13 @@ git checkout HEAD~1
 
 ## Version History
 
-### v1.0-optimized-2025-10-02
+### v1.0-optimized-RB02_Faruk_2.1-2025-10-02
 - First optimized build with critical performance fixes
+- Target: 2.1" Round Touch Display (RB02_Faruk_2.1)
 - 18% CPU reduction achieved
 - Heap fragmentation eliminated
 - Attitude accuracy corrected
+- Binary: `RB02_Faruk_2.1.bin`
 
 ### v1.0-baseline (previous)
 - Original code before optimizations
