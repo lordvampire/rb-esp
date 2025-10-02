@@ -1065,18 +1065,15 @@ void uart_fetch_data()
 {
   if (GpsSpeed0ForDisable == 0)
     return;
-  uint8_t *data = (uint8_t *)malloc(UART_RX_BUF_SIZE + 1);
-  if (data == NULL)
-  {
-    return;
-  }
+  // Static buffer to avoid malloc/free overhead and heap fragmentation
+  static uint8_t data[UART_RX_BUF_SIZE + 1];
+
   const int rxBytes = uart_read_bytes(UART_N, data, UART_RX_BUF_SIZE, 10 / portTICK_PERIOD_MS);
   if (rxBytes > 1)
   {
     data[rxBytes] = 0;
     NMEA_ParseBuffer(data, rxBytes, RB01_GPS_PROTOCOL_UART);
   }
-  free(data);
 }
 #endif
 

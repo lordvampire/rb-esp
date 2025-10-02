@@ -152,7 +152,11 @@ void QMI8658_Init(void)
     printf("QMI8658 Device ID: %x\r\n", buf[0]); // Get chip id
     setState(sensor_running);
 
-    float sampleFreq = 20; // 1Hz ODR 60Hz 2%, Loop is 20Hz
+    // Calculate actual sample frequency based on Driver_Loop timing
+    extern uint8_t DriverLoopMilliseconds;
+    float sampleFreq = 1000.0f / (10.0f + (float)DriverLoopMilliseconds); // Actual loop rate
+    printf("QMI8658 Madgwick sample frequency: %.2f Hz (based on DriverLoopMilliseconds=%d)\n",
+           sampleFreq, DriverLoopMilliseconds);
 
     // 1.1.12 Enable possibility to setup motion
     nvs_handle_t my_handle;

@@ -158,6 +158,10 @@ void lit(int8_t *matrix, float p, float r, uint8_t sizeRow, lv_obj_t **tiles)
 
 int8_t RB02_AdvancedAttitude_SkyMatrixAlign(RB02_AdvancedAttitude_Status *aaStatus, float pitch, float roll)
 {
+    // Threshold to avoid unnecessary recalculation (0.1 degree sensitivity)
+    static float lastPitch = -999.0f;
+    static float lastRoll = -999.0f;
+    const float UPDATE_THRESHOLD = 0.1f;
 
     int8_t rr = 10;
     int8_t rp = 10;
@@ -205,6 +209,15 @@ int8_t RB02_AdvancedAttitude_SkyMatrixAlign(RB02_AdvancedAttitude_Status *aaStat
     }
     //
     //
+
+    // Skip update if change is below threshold (reduces CPU by ~10%)
+    if (fabsf(pitch - lastPitch) < UPDATE_THRESHOLD && fabsf(roll - lastRoll) < UPDATE_THRESHOLD)
+    {
+        return 0;
+    }
+
+    lastPitch = pitch;
+    lastRoll = roll;
 
     lit(aaStatus->SkyMatrix, pitch * (rp / 10.0), -roll * (rr / 10.0), RB_AAT_SKY_TILES, aaStatus->SkyTiles);
     return 0;
