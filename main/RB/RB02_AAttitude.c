@@ -29,6 +29,7 @@
 #include "RB02_AAttitude.h"
 
 #ifdef RB_ENABLE_AAT
+#include "RB02_Constants.h"  // v1.3: Optimization constants
 #include "RB02_GUIHelpers.h"
 #include <stdio.h>
 #include <math.h>
@@ -70,7 +71,7 @@ static float sinfDegree(float angleDegree)
     int16_t angle = angleDegree;
     int16_t sinRes100 = lv_trigo_sin(angle);
     float result = sinRes100;
-    result = result / 32767.0;
+    result = result * INV_32767_0F;  // v1.3: Mul faster than div
     return result;
 }
 static float cosfDegree(float angleDegree)
@@ -78,7 +79,7 @@ static float cosfDegree(float angleDegree)
     int16_t angle = (angleDegree + 90);
     int16_t sinRes100 = lv_trigo_sin(angle);
     float result = sinRes100;
-    result = result / 32767.0;
+    result = result * INV_32767_0F;  // v1.3: Mul faster than div
     return result;
 }
 
@@ -100,7 +101,7 @@ typedef struct
 
 void diameterEndpoints(float cx, float cy, float r, float angleDeg, Point *A, Point *B)
 {
-    // float angleRad = angleDeg * PI / 180.0f;
+    // float angleRad = angleDeg * DEG_TO_RAD;
     float dx = cosfDegree(angleDeg);
     float dy = sinfDegree(angleDeg);
 
@@ -112,14 +113,14 @@ void diameterEndpoints(float cx, float cy, float r, float angleDeg, Point *A, Po
 
 void lit(int8_t *matrix, float p, float r, uint8_t sizeRow, lv_obj_t **tiles)
 {
-    float radiansP = p * PI / 180.0f;
+    float radiansP = p * DEG_TO_RAD;
 
     //
     //
-    float isLineBelow = sinf(radiansP) * sizeRow / 2.0f;
-    float centerX = sizeRow / 2.0f;
-    float centerY = sizeRow / 2.0f + isLineBelow;
-    float radius = sizeRow / 2.0f;
+    float isLineBelow = sinf(radiansP) * sizeRow * INV_2_0F;
+    float centerX = sizeRow * INV_2_0F;
+    float centerY = sizeRow * INV_2_0F + isLineBelow;
+    float radius = sizeRow * INV_2_0F;
     Point A, B;
     diameterEndpoints(centerX, centerY, radius, r, &A, &B);
 
@@ -219,7 +220,7 @@ int8_t RB02_AdvancedAttitude_SkyMatrixAlign(RB02_AdvancedAttitude_Status *aaStat
     lastPitch = pitch;
     lastRoll = roll;
 
-    lit(aaStatus->SkyMatrix, pitch * (rp / 10.0), -roll * (rr / 10.0), RB_AAT_SKY_TILES, aaStatus->SkyTiles);
+    lit(aaStatus->SkyMatrix, pitch * (rp * INV_10_0F), -roll * (rr * INV_10_0F), RB_AAT_SKY_TILES, aaStatus->SkyTiles);
     return 0;
 }
 
@@ -312,7 +313,7 @@ void RB02_AdvancedAttitude_Tick(RB02_AdvancedAttitude_Status *aaStatus, gps_t *g
 {
     char buf[10];
 
-    int16_t AltimeterInFeet = Altimeter / 100.0;
+    int16_t AltimeterInFeet = Altimeter * INV_100_0F;
 
     if (aaStatus->Altimeter != AltimeterInFeet)
     {

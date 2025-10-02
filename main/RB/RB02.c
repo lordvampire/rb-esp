@@ -57,6 +57,7 @@
  * - https://www.waveshare.com/esp32-s3-touch-lcd-2.8c.htm
  */
 #include "RB02.h"
+#include "RB02_Constants.h"  // v1.3: Named constants
 #include "RB02_GUIHelpers.h"
 
 // Images pre-loaded
@@ -729,7 +730,7 @@ void nmea_GGA_UpdatedValueFor(uint8_t csvCounter, int32_t finalNumber, uint8_t d
   float conversionValue = finalNumber;
   for (uint8_t c = 0; c < decimalCounter; c++)
   {
-    conversionValue = conversionValue / 10.0;
+    conversionValue = conversionValue * INV_10_0F;
   }
   switch (csvCounter)
   {
@@ -788,7 +789,7 @@ void nmea_GGA_UpdatedValueFor(uint8_t csvCounter, int32_t finalNumber, uint8_t d
       {
         singletonConfig()->NMEA_DATA.altitude = conversionValue;
       }
-      singletonConfig()->NMEA_DATA.altitude = (conversionValue + singletonConfig()->NMEA_DATA.altitude * 5.0) / 6.0;
+      singletonConfig()->NMEA_DATA.altitude = (conversionValue + singletonConfig()->NMEA_DATA.altitude * 5.0) * INV_6_0F;
       if (singletonConfig()->settingsAutoQNH > 0)
       {
         if (Operative_BMP280 > 0 && Operative_GPS > 0)
@@ -831,7 +832,7 @@ void nmea_RMC_UpdatedValueFor(uint8_t csvCounter, int32_t finalNumber, uint8_t d
   float conversionValue = finalNumber;
   for (uint8_t c = 0; c < decimalCounter; c++)
   {
-    conversionValue = conversionValue / 10.0;
+    conversionValue = conversionValue * INV_10_0F;
   }
   switch (csvCounter)
   {
@@ -932,10 +933,10 @@ void nmea_RMC_UpdatedValueFor(uint8_t csvCounter, int32_t finalNumber, uint8_t d
                GPSAccelerationForAttitudeCompensation,
                GPSLateralYAcceleration);
 #endif
-        if (GPSAccelerationForAttitudeCompensation > 1.5)
-          GPSAccelerationForAttitudeCompensation = 1.5;
-        if (GPSAccelerationForAttitudeCompensation < -1.5)
-          GPSAccelerationForAttitudeCompensation = -1.5;
+        if (GPSAccelerationForAttitudeCompensation > GPS_ACCEL_MAX_LIMIT)
+          GPSAccelerationForAttitudeCompensation = GPS_ACCEL_MAX_LIMIT;
+        if (GPSAccelerationForAttitudeCompensation < GPS_ACCEL_MIN_LIMIT)
+          GPSAccelerationForAttitudeCompensation = GPS_ACCEL_MIN_LIMIT;
 
         if (GPSLateralYAcceleration > 2)
         {
@@ -1197,7 +1198,7 @@ void nvsRestoreGMeter()
       printf("gmeter_max = %d\n", gmeter_max);
 #endif
       float f = gmeter_max;
-      GFactorMax = f / 10.0;
+      GFactorMax = f * INV_10_0F;
       break;
     case ESP_ERR_NVS_NOT_FOUND:
       break;
@@ -1213,7 +1214,7 @@ void nvsRestoreGMeter()
       printf("gmeter_min = %d\n", gmeter_min);
 #endif
       float f = gmeter_min;
-      GFactorMin = f / 10.0;
+      GFactorMin = f * INV_10_0F;
       break;
     case ESP_ERR_NVS_NOT_FOUND:
       break;
@@ -1870,7 +1871,7 @@ void update_Variometer_lvgl_tick(lv_timer_t *t)
   // Variometer => 0.01 Feet/Second => *60/100 => Feet/min
   // UI 90° => 1000ft/min => 180° = 2000ft/min => 360° = 4000ft/min
   // LVGL is *10 Degree;
-  int32_t VDegree = ((Variometer * 6.0 / 10.0) * 36.0 / 40);
+  int32_t VDegree = ((Variometer * 6.0 * INV_10_0F) * 36.0 / 40);
   lv_img_set_angle(Screen_Variometer_Cents, VDegree);
 }
 #endif
