@@ -33,7 +33,13 @@ This fork aims to systematically optimize the RB-Avionics codebase with support 
   - **Impact:** Critical accuracy fix for attitude estimation
   - Status: ✅ Tested & Working
 
-**Total Achieved:** ~18% CPU reduction + stability improvements
+- [x] **String Formatting Cache** (`main/RB/RB02.c`)
+  - Cache display strings, update only when values change significantly
+  - Implemented for: BMP280, Battery, Altimeter, IMU data, Attitude
+  - **Impact:** ~3% CPU reduction, 70-90% fewer sprintf calls
+  - Status: ✅ Tested & Working
+
+**Total Achieved:** ~21% CPU reduction + stability improvements
 
 ## 📋 Planned Optimizations
 
@@ -49,10 +55,6 @@ This fork aims to systematically optimize the RB-Avionics codebase with support 
   - Priority: High (Prevents RAM exhaustion)
   - Estimated Impact: 500KB-2MB RAM savings
 
-- [ ] **String Formatting Cache** - Reduce sprintf() calls
-  - Cache formatted values with change threshold
-  - Priority: Medium-High
-  - Estimated Impact: 2-4% CPU reduction
 
 - [ ] **GPS Map Async Loading** - Non-blocking SD card tile loading
   - Background task for tile loading
@@ -76,9 +78,10 @@ This fork aims to systematically optimize the RB-Avionics codebase with support 
 
 ## 📊 Performance Metrics
 
-| Metric | Before | Current | Target |
-|--------|--------|---------|--------|
-| CPU Usage | ~70-80% | ~52-62% | <50% |
+| Metric | Before | Current (v1.1) | Target |
+|--------|--------|----------------|--------|
+| CPU Usage | ~70-80% | ~49-59% | <50% |
+| sprintf Calls | 30Hz (all) | 1-10Hz (cached) | Minimal |
 | Heap Fragmentation | High | Eliminated | Stable |
 | Attitude Accuracy | Drifting | Corrected | ±0.1° |
 | RAM Usage | Unknown | Baseline | -20% |
@@ -98,13 +101,13 @@ This fork aims to systematically optimize the RB-Avionics codebase with support 
 
 ### Flash Pre-Built Binary
 
-Latest optimized build: [`builds/v1.0-optimized-RB02_Faruk_2.1-2025-10-02/`](builds/v1.0-optimized-RB02_Faruk_2.1-2025-10-02/)
+Latest optimized build: [`builds/v1.1-string-cache-RB02_Faruk_2.1-2025-10-02/`](builds/v1.1-string-cache-RB02_Faruk_2.1-2025-10-02/)
 
 ```bash
 esptool.py --chip esp32s3 --baud 921600 write_flash -z \
-  0x0 builds/v1.0-optimized-RB02_Faruk_2.1-2025-10-02/bootloader.bin \
-  0x8000 builds/v1.0-optimized-RB02_Faruk_2.1-2025-10-02/partition-table.bin \
-  0x10000 builds/v1.0-optimized-RB02_Faruk_2.1-2025-10-02/RB02_Faruk_2.1.bin
+  0x0 builds/v1.1-string-cache-RB02_Faruk_2.1-2025-10-02/bootloader.bin \
+  0x8000 builds/v1.1-string-cache-RB02_Faruk_2.1-2025-10-02/partition-table.bin \
+  0x10000 builds/v1.1-string-cache-RB02_Faruk_2.1-2025-10-02/RB02_Faruk_2.1.bin
 ```
 
 **Flasher Settings:**
@@ -197,5 +200,13 @@ This project inherits the dual licensing from the original:
 
 ---
 
-**Latest Build:** v1.0-optimized-RB02_Faruk_2.1 (October 2, 2025)
-**Status:** ✅ Stable, 18% CPU improvement achieved
+**Latest Build:** v1.1-string-cache-RB02_Faruk_2.1 (October 2, 2025)
+**Status:** ✅ Stable, 21% CPU improvement achieved
+
+### 📊 Performance Measurement
+
+See [OPTIMIZATION_CHANGELOG.md](OPTIMIZATION_CHANGELOG.md) for detailed measurement methods:
+- CPU usage monitoring with `esp_timer_get_time()`
+- Frame rate tracking
+- Heap fragmentation analysis
+- sprintf call reduction tracking

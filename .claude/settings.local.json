@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git tag:*)",
+      "Bash(git remote set-url:*)",
+      "Bash(git remote add:*)",
+      "Bash(git add:*)",
+      "Bash(git commit -m \"$(cat <<''EOF''\nAdd comprehensive code documentation and optimization analysis\n\n- DOKUMENTATION.md: Complete technical documentation\n  - Architecture overview and component structure\n  - All instrument implementations explained\n  - Sensor fusion (Madgwick AHRS, GPS integration)\n  - Display rendering pipeline (LVGL)\n  - Memory management strategy\n  - Build system and configuration\n\n- OPTIMIERUNG.md: Detailed optimization analysis\n  - 5 critical issues (18% CPU savings potential)\n  - 18 high-priority optimizations\n  - 31 medium and 18 low-priority improvements\n  - Estimated 15-25% CPU reduction\n  - 700KB-2.5MB RAM savings\n  - Implementation roadmap with priorities\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")",
+      "Bash(git push:*)",
+      "Bash(idf.py monitor:*)",
+      "Bash(dir:*)",
+      "Bash(git commit -m \"$(cat <<''EOF''\nImplement critical performance optimizations (v1.0-optimized)\n\nPerformance Improvements:\n- UART buffer: Replace malloc/free with static buffer (~8% CPU gain)\n- Attitude matrix: Add update threshold (0.1° sensitivity, ~10% CPU gain)\n- Madgwick filter: Fix sample rate calculation (accuracy critical)\n\nChanges:\n- main/RB/RB02.c: Static UART buffer eliminates heap fragmentation\n- main/RB/RB02_AAttitude.c: Skip unnecessary matrix updates\n- main/QMI8658/QMI8658.c: Calculate correct Madgwick sample frequency\n- main/main.c: Remove task watchdog (caused boot failure)\n\nBuild:\n- builds/v1.0-optimized-2025-10-02/: Tested & working build artifacts\n- OPTIMIZATION_CHANGELOG.md: English documentation with build links\n\nTotal Impact:\n✅ ~18% CPU reduction\n✅ Heap fragmentation eliminated  \n✅ Attitude accuracy corrected\n✅ System boots and runs stable\n\nSee OPTIMIZATION_CHANGELOG.md for details.\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")",
+      "Bash(git mv:*)",
+      "Bash(git commit -m \"$(cat <<''EOF''\nName correction for 2.1\"\" display build configuration\n\nChanges:\n- CMakeLists.txt: Rename project to RB02_Faruk_2.1\n- builds/: Rename folder to v1.0-optimized-RB02_Faruk_2.1-2025-10-02\n- OPTIMIZATION_CHANGELOG.md: Update all references to new naming scheme\n\nBinary output will now be: RB02_Faruk_2.1.bin (instead of ESP32-S3-Touch-LCD-2.8C-Test.bin)\n\nThis reflects the actual hardware (2.1\"\" Round Touch Display) and custom configuration.\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")",
+      "Bash(git commit:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

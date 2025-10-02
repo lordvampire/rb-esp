@@ -2650,28 +2650,45 @@ void rb_increase_lvgl_tick(lv_timer_t *t)
       OperativeWarningVisible = false;
     }
     char buf[4 + 4 + 4 + 4 + 4 + 4 + 22];
-    sprintf(buf, "AX:%2.1f AY:%2.1f AZ:%2.1f GX:%2.1f GY:%2.1f GZ:%2.1f",
-            Accel.x,
-            Accel.y,
-            Accel.z,
-            Gyro.x,
-            Gyro.y,
-            Gyro.z);
-    lv_label_set_text(SettingStatus0, buf);
-    sprintf(buf, "FX:%2.1f FY:%2.1f FZ:%2.1f RX:%2.1f RY:%2.1f RZ:%2.1f",
-            AccelFiltered.x,
-            AccelFiltered.y,
-            AccelFiltered.z,
-            GyroFiltered.x + GyroBias.x,
-            GyroFiltered.y + GyroBias.y,
-            GyroFiltered.z + GyroBias.z);
-    lv_label_set_text(SettingStatus1, buf);
 
-    sprintf(buf, "R:%2.1f P:%2.1f T:%2.1f",
-            AttitudeRoll,
-            AttitudePitch,
-            AttitudeYaw);
-    lv_label_set_text(SettingStatus2, buf);
+    // Cache IMU raw data display (update every ~0.2 units change)
+    static IMUdata lastAccel = {-999, -999, -999};
+    static IMUdata lastGyro = {-999, -999, -999};
+    if (fabs(Accel.x - lastAccel.x) > 0.2f || fabs(Accel.y - lastAccel.y) > 0.2f || fabs(Accel.z - lastAccel.z) > 0.2f ||
+        fabs(Gyro.x - lastGyro.x) > 0.2f || fabs(Gyro.y - lastGyro.y) > 0.2f || fabs(Gyro.z - lastGyro.z) > 0.2f)
+    {
+        sprintf(buf, "AX:%2.1f AY:%2.1f AZ:%2.1f GX:%2.1f GY:%2.1f GZ:%2.1f",
+                Accel.x, Accel.y, Accel.z, Gyro.x, Gyro.y, Gyro.z);
+        lv_label_set_text(SettingStatus0, buf);
+        lastAccel = Accel;
+        lastGyro = Gyro;
+    }
+
+    // Cache filtered IMU data display
+    static IMUdata lastAccelFilt = {-999, -999, -999};
+    static IMUdata lastGyroFilt = {-999, -999, -999};
+    IMUdata gyroWithBias = {GyroFiltered.x + GyroBias.x, GyroFiltered.y + GyroBias.y, GyroFiltered.z + GyroBias.z};
+    if (fabs(AccelFiltered.x - lastAccelFilt.x) > 0.2f || fabs(AccelFiltered.y - lastAccelFilt.y) > 0.2f || fabs(AccelFiltered.z - lastAccelFilt.z) > 0.2f ||
+        fabs(gyroWithBias.x - lastGyroFilt.x) > 0.2f || fabs(gyroWithBias.y - lastGyroFilt.y) > 0.2f || fabs(gyroWithBias.z - lastGyroFilt.z) > 0.2f)
+    {
+        sprintf(buf, "FX:%2.1f FY:%2.1f FZ:%2.1f RX:%2.1f RY:%2.1f RZ:%2.1f",
+                AccelFiltered.x, AccelFiltered.y, AccelFiltered.z,
+                gyroWithBias.x, gyroWithBias.y, gyroWithBias.z);
+        lv_label_set_text(SettingStatus1, buf);
+        lastAccelFilt = AccelFiltered;
+        lastGyroFilt = gyroWithBias;
+    }
+
+    // Cache attitude display (Roll/Pitch/Yaw)
+    static float lastRoll = -999.0f, lastPitch = -999.0f, lastYaw = -999.0f;
+    if (fabs(AttitudeRoll - lastRoll) > 0.2f || fabs(AttitudePitch - lastPitch) > 0.2f || fabs(AttitudeYaw - lastYaw) > 0.2f)
+    {
+        sprintf(buf, "R:%2.1f P:%2.1f T:%2.1f", AttitudeRoll, AttitudePitch, AttitudeYaw);
+        lv_label_set_text(SettingStatus2, buf);
+        lastRoll = AttitudeRoll;
+        lastPitch = AttitudePitch;
+        lastYaw = AttitudeYaw;
+    }
 
     sprintf(buf, "CX:%2.1f CY:%2.1f CZ:%2.1f BX:%2.1f BY:%2.1f BZ:%2.1f",
             singletonConfig()->GyroHardwareCalibration.x,
@@ -2682,14 +2699,28 @@ void rb_increase_lvgl_tick(lv_timer_t *t)
             GyroBias.z);
     lv_label_set_text(SettingStatus5, buf);
 
-    sprintf(buf, "%.1f°C %.2fhPa",
-            bmp280Temperature / 100.0,
-            bmp280Pressure / 100.0);
-    lv_label_set_text(SettingStatus3, buf);
+    // Cache BMP280 display: only update if values changed significantly
+    static float lastBmp280Temp = -999.0f;
+    static float lastBmp280Press = -999.0f;
+    float currentTemp = bmp280Temperature / 100.0f;
+    float currentPress = bmp280Pressure / 100.0f;
 
-    // 1.1.4
-    sprintf(buf, "%.1f Volts", BAT_analogVolts);
-    lv_label_set_text(SettingStatus4, buf);
+    if (fabs(currentTemp - lastBmp280Temp) > 0.5f || fabs(currentPress - lastBmp280Press) > 0.5f)
+    {
+        sprintf(buf, "%.1f°C %.2fhPa", currentTemp, currentPress);
+        lv_label_set_text(SettingStatus3, buf);
+        lastBmp280Temp = currentTemp;
+        lastBmp280Press = currentPress;
+    }
+
+    // 1.1.4 - Cache battery voltage display
+    static float lastBatVolts = -999.0f;
+    if (fabs(BAT_analogVolts - lastBatVolts) > 0.1f)
+    {
+        sprintf(buf, "%.1f Volts", BAT_analogVolts);
+        lv_label_set_text(SettingStatus4, buf);
+        lastBatVolts = BAT_analogVolts;
+    }
 
     // 1.1.17
     snprintf(buf, sizeof(buf), "Engine MDHms: %02d/%02d %02d:%02d:%02d", datetime.month, datetime.day, datetime.hour, datetime.minute, datetime.second);
@@ -3265,7 +3296,18 @@ static void AltimeterOverrideChanged(lv_event_t *e)
   example1_BMP280_lvgl_tick(NULL);
 
   char buf[50];
-  sprintf(buf, "Altimeter QNH: %d mmHg %ld feet (%ld)", QNH, Altimeter, singletonConfig()->bmp280override);
+  // Cache altimeter display: only update if values changed
+  static int32_t lastQNH = -999;
+  static int32_t lastAltimeter = -999999;
+  static int32_t lastOverride = -999999;
+
+  if (QNH != lastQNH || Altimeter != lastAltimeter || singletonConfig()->bmp280override != lastOverride)
+  {
+      sprintf(buf, "Altimeter QNH: %d mmHg %ld feet (%ld)", QNH, Altimeter, singletonConfig()->bmp280override);
+      lastQNH = QNH;
+      lastAltimeter = Altimeter;
+      lastOverride = singletonConfig()->bmp280override;
+  }
   lv_label_set_text(bmp280overrideLabel, buf);
 
   // Store
@@ -3746,7 +3788,18 @@ static void Onboard_create_Setup(lv_obj_t *parent)
     lv_obj_set_style_text_align(bmp280overrideLabel, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_set_style_text_font(bmp280overrideLabel, &lv_font_montserrat_16, 0);
     char buf[50];
-    sprintf(buf, "Altimeter QNH: %d mmHg %ld feet (%ld)", QNH, Altimeter, singletonConfig()->bmp280override);
+    // Cache altimeter display: only update if values changed
+  static int32_t lastQNH = -999;
+  static int32_t lastAltimeter = -999999;
+  static int32_t lastOverride = -999999;
+
+  if (QNH != lastQNH || Altimeter != lastAltimeter || singletonConfig()->bmp280override != lastOverride)
+  {
+      sprintf(buf, "Altimeter QNH: %d mmHg %ld feet (%ld)", QNH, Altimeter, singletonConfig()->bmp280override);
+      lastQNH = QNH;
+      lastAltimeter = Altimeter;
+      lastOverride = singletonConfig()->bmp280override;
+  }
     lv_label_set_text(bmp280overrideLabel, buf);
     lv_obj_add_style(bmp280overrideLabel, &style_title, LV_STATE_DEFAULT);
 
