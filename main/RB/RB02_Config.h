@@ -95,6 +95,8 @@ typedef struct
   lv_obj_t *tEMS;
 #endif
     lv_obj_t *panelMountAlignmentLabelPitch;
+    lv_obj_t *panelMountAlignmentLabelRoll;
+    lv_obj_t *panelMountAlignmentLabelYaw;
 } RB02_UI;
 
 typedef struct

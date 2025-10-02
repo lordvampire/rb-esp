@@ -79,6 +79,37 @@ static void PanelMountPitchChanged(lv_event_t *e)
   nvsStoreGyroCalibration();
 }
 
+static void PanelMountRollChanged(lv_event_t *e)
+{
+  int32_t value = lv_slider_get_value(lv_event_get_target(e));
+  // Stored int 16 bit 32768 -> customers have 39°Pitch on Helicopters
+  float equivalentFloat = value / 500.0;
+
+  PanelAlignment.z = equivalentFloat;
+
+  char buf[16 + 8];
+  sprintf(buf, "Panel Roll: %.2f", PanelAlignment.z);
+  lv_label_set_text(singletonConfig()->ui.panelMountAlignmentLabelRoll, buf);
+
+  nvsStoreGyroCalibration();
+}
+
+static void PanelMountYawChanged(lv_event_t *e)
+{
+  int32_t value = lv_slider_get_value(lv_event_get_target(e));
+  // Stored int 16 bit 32768 -> customers have 39°Pitch on Helicopters
+  float equivalentFloat = value / 500.0;
+
+  PanelAlignment.y = equivalentFloat;
+
+  char buf[16 + 8];
+  sprintf(buf, "Panel Yaw: %.2f", PanelAlignment.y);
+  lv_label_set_text(singletonConfig()->ui.panelMountAlignmentLabelYaw, buf);
+
+  nvsStoreGyroCalibration();
+}
+
+
 static void event_handler_set_panel_alignment(lv_event_t *e)
 {
   lv_event_code_t code = lv_event_get_code(e);
@@ -97,8 +128,18 @@ static void event_handler_set_panel_alignment(lv_event_t *e)
       }
     }
 
+
+    if (AccelFiltered.y > 0.99999 || AccelFiltered.y < -0.99999)
+    {
+      PanelAlignment.y = 0;
+    }
+    else
+    {
+      PanelAlignment.y = acosf(AccelFiltered.y) * RAD2DEG;
+    }
+
     char buf[16 + 8];
-    sprintf(buf, "Panel Pitch: %.2f %.3f", PanelAlignment.x, AccelFiltered.x);
+    sprintf(buf, "Panel: %.2f %.2f", PanelAlignment.x, PanelAlignment.y);
     lv_label_set_text(singletonConfig()->ui.panelMountAlignmentLabelPitch, buf);
 
     nvsStoreGyroCalibration();
@@ -161,7 +202,7 @@ lv_obj_t *RB02_Setup_CreateScreen(RB02_Status *status, lv_obj_t *parent, int *li
 #endif
 
   // Attitude Panel Alignment Roll and Pitch #47
-  if (true)
+  if (false) // Temporary disable auto alignment
   {
     lv_obj_t *btn1 = lv_btn_create(parent);
     lv_obj_add_event_cb(btn1, event_handler_set_panel_alignment, LV_EVENT_ALL, NULL);
@@ -207,6 +248,81 @@ lv_obj_t *RB02_Setup_CreateScreen(RB02_Status *status, lv_obj_t *parent, int *li
 
     *lineY += 70;
   }
+
+
+  
+  if (true)
+  {
+    lv_obj_t *Slider = lv_slider_create(parent);
+    lv_obj_add_flag(Slider, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_set_size(Slider, 300, 35);
+    lv_obj_set_style_radius(Slider, 3, LV_PART_KNOB); // Adjust the value for more or less rounding
+    lv_obj_set_style_bg_opa(Slider, LV_OPA_TRANSP, LV_PART_KNOB);
+
+    lv_obj_set_style_bg_color(Slider, lv_color_hex(0xAAAAAA), LV_PART_KNOB);
+    lv_obj_set_style_bg_color(Slider, lv_color_hex(0xFFFFFF), LV_PART_INDICATOR);
+    lv_obj_set_style_outline_width(Slider, 2, LV_PART_INDICATOR);
+    lv_obj_set_style_outline_color(Slider, lv_color_hex(0xD3D3D3), LV_PART_INDICATOR);
+    lv_slider_set_range(Slider, -32000, 32000);
+
+    int32_t value = PanelAlignment.z * 500.0;
+
+    lv_slider_set_value(Slider, value, LV_ANIM_OFF);
+    lv_obj_add_event_cb(Slider, PanelMountRollChanged, LV_EVENT_VALUE_CHANGED, Slider);
+    lv_obj_align(Slider, LV_ALIGN_CENTER, 0, *lineY + 30);
+
+    lv_obj_t *SliderLabel = lv_label_create(parent);
+    lv_obj_set_size(SliderLabel, 300, 20);
+    lv_obj_align(SliderLabel, LV_ALIGN_CENTER, 0, *lineY);
+    lv_obj_set_style_text_align(SliderLabel, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_set_style_text_font(SliderLabel, &lv_font_montserrat_16, 0);
+    lv_obj_set_style_text_color(SliderLabel, lv_color_white(), 0);
+    char buf[16 + 8];
+    sprintf(buf, "Panel Roll: %.2f", PanelAlignment.z);
+    lv_label_set_text(SliderLabel, buf);
+
+    singletonConfig()->ui.panelMountAlignmentLabelRoll = SliderLabel;
+
+    *lineY += 70;
+  }
+
+
+
+  if (true)
+  {
+    lv_obj_t *Slider = lv_slider_create(parent);
+    lv_obj_add_flag(Slider, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_set_size(Slider, 300, 35);
+    lv_obj_set_style_radius(Slider, 3, LV_PART_KNOB); // Adjust the value for more or less rounding
+    lv_obj_set_style_bg_opa(Slider, LV_OPA_TRANSP, LV_PART_KNOB);
+
+    lv_obj_set_style_bg_color(Slider, lv_color_hex(0xAAAAAA), LV_PART_KNOB);
+    lv_obj_set_style_bg_color(Slider, lv_color_hex(0xFFFFFF), LV_PART_INDICATOR);
+    lv_obj_set_style_outline_width(Slider, 2, LV_PART_INDICATOR);
+    lv_obj_set_style_outline_color(Slider, lv_color_hex(0xD3D3D3), LV_PART_INDICATOR);
+    lv_slider_set_range(Slider, -32000, 32000);
+
+    int32_t value = PanelAlignment.y * 500.0;
+
+    lv_slider_set_value(Slider, value, LV_ANIM_OFF);
+    lv_obj_add_event_cb(Slider, PanelMountYawChanged, LV_EVENT_VALUE_CHANGED, Slider);
+    lv_obj_align(Slider, LV_ALIGN_CENTER, 0, *lineY + 30);
+
+    lv_obj_t *SliderLabel = lv_label_create(parent);
+    lv_obj_set_size(SliderLabel, 300, 20);
+    lv_obj_align(SliderLabel, LV_ALIGN_CENTER, 0, *lineY);
+    lv_obj_set_style_text_align(SliderLabel, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_set_style_text_font(SliderLabel, &lv_font_montserrat_16, 0);
+    lv_obj_set_style_text_color(SliderLabel, lv_color_white(), 0);
+    char buf[16 + 8];
+    sprintf(buf, "Panel Yaw: %.2f", PanelAlignment.y);
+    lv_label_set_text(SliderLabel, buf);
+
+    singletonConfig()->ui.panelMountAlignmentLabelYaw = SliderLabel;
+
+    *lineY += 70;
+  }
+
 
   return NULL;
 }

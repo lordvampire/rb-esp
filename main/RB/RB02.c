@@ -1339,7 +1339,16 @@ void nvsRestoreGMeter()
     printf("Gyro Calibration %.1f %.1f %.1f\n", singletonConfig()->GyroHardwareCalibration.x, singletonConfig()->GyroHardwareCalibration.z, singletonConfig()->GyroHardwareCalibration.z);
 #endif
 
+    compBuffer = 0;
     nvs_get_i16(my_handle, "panAZ", &compBuffer);
+    PanelAlignment.z = compBuffer / (RB_GYRO_CALIBRATION_PRECISION / 2.0);
+
+    compBuffer = 0;
+    nvs_get_i16(my_handle, "panAY", &compBuffer);
+    PanelAlignment.y = compBuffer / (RB_GYRO_CALIBRATION_PRECISION / 2.0);
+
+    compBuffer = 0;
+    nvs_get_i16(my_handle, "panAX", &compBuffer);
     PanelAlignment.x = compBuffer / (RB_GYRO_CALIBRATION_PRECISION / 2.0);
 
     gyroHardwareSetCalibration(GyroFiltered.x, GyroFiltered.y, GyroFiltered.z);
@@ -1472,8 +1481,15 @@ void nvsStoreGyroCalibration()
     calBuffer = singletonConfig()->GyroHardwareCalibration.z * RB_GYRO_CALIBRATION_PRECISION;
     nvs_set_i16(my_handle, "calGZ", calBuffer);
 
-    calBuffer = PanelAlignment.x * (RB_GYRO_CALIBRATION_PRECISION / 2.0);
+    calBuffer = PanelAlignment.z * (RB_GYRO_CALIBRATION_PRECISION / 2.0);
     nvs_set_i16(my_handle, "panAZ", calBuffer);
+
+    calBuffer = PanelAlignment.x * (RB_GYRO_CALIBRATION_PRECISION / 2.0);
+    nvs_set_i16(my_handle, "panAY", calBuffer);
+
+    calBuffer = PanelAlignment.x * (RB_GYRO_CALIBRATION_PRECISION / 2.0);
+    nvs_set_i16(my_handle, "panAX", calBuffer);
+
 
     nvs_close(my_handle);
   }

@@ -41,6 +41,8 @@ extern uint16_t speedGreen;
 extern uint16_t speedYellow;
 extern uint16_t speedRed;
 
+extern IMUdata PanelAlignment;
+
 extern uint8_t DriverLoopMilliseconds;
 extern float AttitudeBalanceAlpha;
 extern float FilterMoltiplier;
@@ -50,6 +52,7 @@ extern float FilterMoltiplierOutput;
 void nvsStorePCal();
 void nvsStoreSpeedArc();
 void nvsStoreFilters();
+void nvsStoreGyroCalibration();
 
 RB02_Status *VendorMakeDefaultsDefaultWithConfig(RB02_Status *config){
     config->settingsAutoQNH = 1;
@@ -72,6 +75,18 @@ void VendorMakeDefaultsDefault()
     FilterMoltiplierGyro = 4.0;
     AttitudeBalanceAlpha = 1.0/230.0;
     DriverLoopMilliseconds = 40;
+
+    singletonConfig()->GyroHardwareCalibration.x = 0;
+    singletonConfig()->GyroHardwareCalibration.y = 0;
+    singletonConfig()->GyroHardwareCalibration.z = 0;
+    singletonConfig()->bmp280override = 0;
+    singletonConfig()->settingsAutoQNH = 0;
+    singletonConfig()->settingsBluetoothEnabled = 0;
+
+
+    PanelAlignment.x = 0;
+    PanelAlignment.y = 0;
+    PanelAlignment.z = 0;
 }
 
 #if ENABLE_VENDOR == RB_VENDOR_1
@@ -92,6 +107,7 @@ void VendorMakeDefaults()
     nvsStoreSpeedArc();
     nvsStorePCal();
     nvsStoreFilters();
+    nvsStoreGyroCalibration();
 }
 #endif
 #if ENABLE_VENDOR == RB_VENDOR_2
@@ -102,6 +118,7 @@ void VendorMakeDefaults()
     nvsStoreSpeedArc();
     nvsStorePCal();
     nvsStoreFilters();
+    nvsStoreGyroCalibration();
 }
 #endif
 #if ENABLE_VENDOR == RB_VENDOR_3
@@ -112,5 +129,6 @@ void VendorMakeDefaults()
     nvsStoreSpeedArc();
     nvsStorePCal();
     nvsStoreFilters();
+    nvsStoreGyroCalibration();
 }
 #endif
