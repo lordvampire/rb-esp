@@ -1150,4 +1150,29 @@ lv_obj_t *RB02_AdvancedAttitude_CreateScreen(RB02_AdvancedAttitude_Status *aaSta
     return NULL;
 }
 
+// v1.2: Tab resource cleanup
+void RB02_AdvancedAttitude_Cleanup(RB02_AdvancedAttitude_Status *aaStatus)
+{
+    // Free SkyMatrix malloc allocation
+    if (aaStatus->SkyMatrix != NULL)
+    {
+        free(aaStatus->SkyMatrix);
+        aaStatus->SkyMatrix = NULL;
+    }
+
+    // Delete all sky tiles (LVGL objects)
+    for (int i = 0; i < RB_AAT_SKY_TILES * RB_AAT_SKY_TILES; i++)
+    {
+        if (aaStatus->SkyTiles[i] != NULL)
+        {
+            lv_obj_del(aaStatus->SkyTiles[i]);
+            aaStatus->SkyTiles[i] = NULL;
+        }
+    }
+
+#ifdef RB_ENABLE_CONSOLE_DEBUG
+    printf("RB02_AdvancedAttitude_Cleanup: Freed SkyMatrix and %d tiles\n", RB_AAT_SKY_TILES * RB_AAT_SKY_TILES);
+#endif
+}
+
 #endif

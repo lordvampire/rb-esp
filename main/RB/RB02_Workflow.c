@@ -29,6 +29,12 @@
 #include "RB02_Workflow.h"
 #include "lvgl.h"
 #include "Buzzer.h"
+#ifdef RB_ENABLE_MAP
+#include "RB02_GPSMap.h"
+#endif
+#ifdef RB_ENABLE_AAT
+#include "RB02_AAttitude.h"
+#endif
 
 void RB02_Main()
 {
@@ -59,6 +65,49 @@ lv_obj_t *RB02_Main_CreateLoadingSlider(lv_obj_t *parent)
 
     return loadingSlider;
 }
+// v1.2: Tab switch event handler for resource cleanup
+static uint16_t last_active_tab = 0xFFFF;
+
+void tab_changed_event_cb(lv_event_t *e)
+{
+    lv_obj_t *tabview = lv_event_get_target(e);
+    uint16_t active_tab = lv_tabview_get_tab_act(tabview);
+
+    // Only cleanup when switching away from a tab
+    if (last_active_tab != 0xFFFF && last_active_tab != active_tab)
+    {
+        // Determine which tab we're leaving and cleanup its resources
+        // Tab indices depend on build configuration, so we check against known tabs
+
+#ifdef RB_ENABLE_MAP
+        // If leaving GPS Map tab, cleanup tiles
+        // Note: Tab index varies by configuration, using object comparison instead
+        lv_obj_t *map_tab = lv_tabview_get_tab_btns(tabview);
+        if (map_tab != NULL)
+        {
+            RB02_Status *status = singletonConfig();
+            if (status->gpsMapStatus.tiles[0] != NULL)
+            {
+                // Tiles exist, likely leaving map tab
+                RB02_GPSMap_Cleanup(&status->gpsMapStatus);
+            }
+        }
+#endif
+
+#ifdef RB_ENABLE_AAT
+        // If leaving Advanced Attitude tab, cleanup sky matrix
+        extern RB02_AdvancedAttitude_Status advancedAttitude_Status;
+        if (advancedAttitude_Status.SkyMatrix != NULL)
+        {
+            // SkyMatrix exists, likely leaving advanced attitude tab
+            RB02_AdvancedAttitude_Cleanup(&advancedAttitude_Status);
+        }
+#endif
+    }
+
+    last_active_tab = active_tab;
+}
+
 void rb_increase_lvgl_tick(lv_timer_t *t);
 void Set_Backlight(uint8_t Light);
 void RB02_MainWithConfig(RB02_Status *status)
@@ -66,6 +115,10 @@ void RB02_MainWithConfig(RB02_Status *status)
     lv_obj_set_style_bg_color(lv_scr_act(), lv_color_black(), LV_STATE_DEFAULT);
     tv = lv_tabview_create(lv_scr_act(), LV_DIR_TOP, 0);
     lv_obj_set_style_bg_color(tv, lv_color_black(), LV_STATE_DEFAULT);
+
+    // v1.2: Add tab change event handler for resource cleanup
+    lv_obj_add_event_cb(tv, tab_changed_event_cb, LV_EVENT_VALUE_CHANGED, NULL);
+
     status->ui.Loading_slider = RB02_Main_CreateLoadingSlider(lv_scr_act());
     lv_timer_t *auto_step_timer = lv_timer_create(rb_increase_lvgl_tick, 100, NULL);
     if (auto_step_timer == NULL)

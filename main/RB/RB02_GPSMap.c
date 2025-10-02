@@ -42,6 +42,9 @@
 // #define RB_MAP_MULTI_TILE 1
 extern lv_style_t style_title;
 
+// v1.2: Forward declaration for async tile loading
+static void queue_tile_load(RB02_GpsMapStatus *gpsMapStatus, uint8_t index, const char *filename);
+
 void RB02_GPSMap_ShowLoading(RB02_GpsMapStatus *gpsMapStatus, bool show)
 {
 #ifdef RB_ENABLE_CONSOLE_DEBUG
@@ -329,7 +332,8 @@ void RB02_GPSMap_ReloadTiles(RB02_GpsMapStatus *gpsMapStatus, gps_t *gpsStatus, 
                 gpsMapStatus->lastTile = tileCoordinates;
             }
             lv_label_set_text(gpsMapStatus->labelTilePath, filename);
-            lv_img_set_src(backgroundImage, filename);
+            // v1.2: Use async loading instead of blocking lv_img_set_src
+            queue_tile_load(gpsMapStatus, x * (SCREEN_WIDTH / gpsMapStatus->tileSizeWidth) + y, filename);
             // lv_obj_set_size(backgroundImage, gpsMapStatus->tileSizeWidth, gpsMapStatus->tileSizeHeight);
             lv_obj_set_size(backgroundImage, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
 #ifdef RB_MAP_MULTI_TILE
@@ -371,7 +375,8 @@ void RB02_GPSMap_ReloadMBTilesLoadTile(RB02_GpsMapStatus *gpsMapStatus, uint8_t 
     }
 
     lv_label_set_text(gpsMapStatus->labelTilePath, filename);
-    lv_img_set_src(backgroundImage, filename);
+    // v1.2: Use async loading instead of blocking lv_img_set_src
+    queue_tile_load(gpsMapStatus, index, filename);
     lv_obj_align(backgroundImage, LV_ALIGN_CENTER, lx, ly);
     // lv_img_set_pivot(backgroundImage, 0, 0);
     lv_img_set_offset_x(backgroundImage, -ox);
@@ -539,6 +544,9 @@ lv_obj_t *RB02_GPSMap_CreateScreen(RB02_GpsMapStatus *gpsMapStatus, lv_obj_t *pa
     {
         gpsMapStatus->tiles[x] = NULL;
     }
+
+    // v1.2: Initialize async tile loader
+    RB02_GPSMap_InitAsyncLoader(gpsMapStatus);
 #else
 
 #endif
@@ -785,6 +793,138 @@ void RB02_GPSMap_Tick(RB02_GpsMapStatus *gpsMapStatus, gps_t *gpsStatus, lv_obj_
            gpsMapStatus->mapLatitudeBegin,
            gpsMapStatus->mapLongitudeEnd,
            gpsMapStatus->mapLongitudeBegin);
+#endif
+}
+
+// v1.2: Async tile loading task
+static void tile_loader_task(void *param)
+{
+#ifdef RB_02_ENABLE_EXTERNALMAP
+    RB02_GpsMapStatus *gpsMapStatus = (RB02_GpsMapStatus *)param;
+
+    while (1)
+    {
+        // Check if there are pending tile load requests
+        if (xSemaphoreTake(gpsMapStatus->tile_mutex, portMAX_DELAY) == pdTRUE)
+        {
+            for (uint8_t i = 0; i < gpsMapStatus->queue_count; i++)
+            {
+                TileLoadRequest *req = &gpsMapStatus->load_queue[i];
+                if (req->pending)
+                {
+                    // Load tile in background (non-blocking)
+                    if (gpsMapStatus->tiles[req->index] != NULL)
+                    {
+                        lv_img_set_src(gpsMapStatus->tiles[req->index], req->filename);
+#ifdef RB_ENABLE_CONSOLE_DEBUG
+                        printf("Async loaded tile %d: %s\n", req->index, req->filename);
+#endif
+                    }
+                    req->pending = false;
+                }
+            }
+            gpsMapStatus->queue_count = 0;
+            xSemaphoreGive(gpsMapStatus->tile_mutex);
+        }
+
+        // Yield to other tasks
+        vTaskDelay(pdMS_TO_TICKS(50)); // Check every 50ms
+    }
+#endif
+    vTaskDelete(NULL);
+}
+
+// v1.2: Initialize async tile loader
+void RB02_GPSMap_InitAsyncLoader(RB02_GpsMapStatus *gpsMapStatus)
+{
+#ifdef RB_02_ENABLE_EXTERNALMAP
+    // Create mutex for thread-safe queue access
+    gpsMapStatus->tile_mutex = xSemaphoreCreateMutex();
+    gpsMapStatus->queue_count = 0;
+
+    // Initialize queue
+    for (int i = 0; i < 9; i++)
+    {
+        gpsMapStatus->load_queue[i].pending = false;
+    }
+
+    // Create background task for tile loading
+    xTaskCreatePinnedToCore(
+        tile_loader_task,
+        "TileLoader",
+        4096,
+        gpsMapStatus,
+        2, // Lower priority than UI
+        &gpsMapStatus->tile_loader_task,
+        0);
+
+#ifdef RB_ENABLE_CONSOLE_DEBUG
+    printf("RB02_GPSMap_InitAsyncLoader: Task created\n");
+#endif
+#endif
+}
+
+// v1.2: Stop async tile loader
+void RB02_GPSMap_StopAsyncLoader(RB02_GpsMapStatus *gpsMapStatus)
+{
+#ifdef RB_02_ENABLE_EXTERNALMAP
+    if (gpsMapStatus->tile_loader_task != NULL)
+    {
+        vTaskDelete(gpsMapStatus->tile_loader_task);
+        gpsMapStatus->tile_loader_task = NULL;
+    }
+
+    if (gpsMapStatus->tile_mutex != NULL)
+    {
+        vSemaphoreDelete(gpsMapStatus->tile_mutex);
+        gpsMapStatus->tile_mutex = NULL;
+    }
+
+#ifdef RB_ENABLE_CONSOLE_DEBUG
+    printf("RB02_GPSMap_StopAsyncLoader: Task stopped\n");
+#endif
+#endif
+}
+
+// v1.2: Queue tile for async loading
+static void queue_tile_load(RB02_GpsMapStatus *gpsMapStatus, uint8_t index, const char *filename)
+{
+#ifdef RB_02_ENABLE_EXTERNALMAP
+    if (gpsMapStatus->tile_mutex != NULL &&
+        xSemaphoreTake(gpsMapStatus->tile_mutex, pdMS_TO_TICKS(10)) == pdTRUE)
+    {
+        if (gpsMapStatus->queue_count < 9)
+        {
+            TileLoadRequest *req = &gpsMapStatus->load_queue[gpsMapStatus->queue_count];
+            req->index = index;
+            snprintf(req->filename, sizeof(req->filename), "%s", filename);
+            req->pending = true;
+            gpsMapStatus->queue_count++;
+        }
+        xSemaphoreGive(gpsMapStatus->tile_mutex);
+    }
+#endif
+}
+
+// v1.2: Tab resource cleanup
+void RB02_GPSMap_Cleanup(RB02_GpsMapStatus *gpsMapStatus)
+{
+#ifdef RB_02_ENABLE_EXTERNALMAP
+    // Stop async loader first
+    RB02_GPSMap_StopAsyncLoader(gpsMapStatus);
+
+    // Delete all tile images to free memory
+    for (int i = 0; i < 9; i++)
+    {
+        if (gpsMapStatus->tiles[i] != NULL)
+        {
+            lv_obj_del(gpsMapStatus->tiles[i]);
+            gpsMapStatus->tiles[i] = NULL;
+        }
+    }
+#ifdef RB_ENABLE_CONSOLE_DEBUG
+    printf("RB02_GPSMap_Cleanup: Freed %d tiles\n", 9);
+#endif
 #endif
 }
 #endif

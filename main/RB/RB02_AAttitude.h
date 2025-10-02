@@ -79,4 +79,5 @@ extern RB02_AdvancedAttitude_Status advancedAttitude_Status;
 
 lv_obj_t *RB02_AdvancedAttitude_CreateScreen(RB02_AdvancedAttitude_Status *aaStatus);
 void RB02_AdvancedAttitude_Tick(RB02_AdvancedAttitude_Status *aaStatus, gps_t *gpsStatus, int32_t Altimeter, int32_t QNH, int32_t Variometer);
+void RB02_AdvancedAttitude_Cleanup(RB02_AdvancedAttitude_Status *aaStatus); // v1.2: Free resources on tab switch
 #endif

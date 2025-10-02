@@ -34,6 +34,9 @@
 
 #include "lvgl.h"
 #include "RB02_NMEA.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include "freertos/semphr.h"
 
 
 
@@ -44,6 +47,14 @@ typedef struct
     int y_tms;
 } TileXY;
 
+// v1.2: Async tile loading
+typedef struct
+{
+    char filename[64];
+    uint8_t index;
+    bool pending;
+} TileLoadRequest;
+
 typedef struct
 {
 #ifdef RB_02_ENABLE_EXTERNALMAP
@@ -51,6 +62,12 @@ typedef struct
 
     uint8_t zoomLevel;
     uint8_t mapDirty;
+
+    // v1.2: Async loading support
+    TaskHandle_t tile_loader_task;
+    SemaphoreHandle_t tile_mutex;
+    TileLoadRequest load_queue[9];
+    uint8_t queue_count;
 
     bool enableMercatoreLatLon;
 #endif
@@ -77,5 +94,8 @@ void RB02_GPSMap_Touch_N(RB02_GpsMapStatus *gpsMapStatus);
 void RB02_GPSMap_Touch_S(RB02_GpsMapStatus *gpsMapStatus);
 void RB02_GPSMap_Touch_W(RB02_GpsMapStatus *gpsMapStatus);
 void RB02_GPSMap_Touch_E(RB02_GpsMapStatus *gpsMapStatus);
+void RB02_GPSMap_Cleanup(RB02_GpsMapStatus *gpsMapStatus); // v1.2: Free resources on tab switch
+void RB02_GPSMap_InitAsyncLoader(RB02_GpsMapStatus *gpsMapStatus); // v1.2: Initialize async tile loader
+void RB02_GPSMap_StopAsyncLoader(RB02_GpsMapStatus *gpsMapStatus); // v1.2: Stop async tile loader
 
 #endif
