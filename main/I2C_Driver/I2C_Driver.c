@@ -1,5 +1,6 @@
 #include "I2C_Driver.h"
-
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 
 #define I2C_TRANS_BUF_MINIMUM_SIZE     (sizeof(i2c_cmd_desc_t) + \
                                         sizeof(i2c_cmd_link_t) * 8) /* It is required to have allocate one i2c_cmd_desc_t per command:
@@ -27,11 +28,30 @@ static esp_err_t i2c_master_init(void)
 
     return i2c_driver_install(i2c_master_port, conf.mode, I2C_MASTER_RX_BUF_DISABLE, I2C_MASTER_TX_BUF_DISABLE, 0);
 }
+
+// v1.4: I2C initialization with retry logic for boot stability
 void I2C_Init(void)
 {
     /********************* I2C *********************/
-    ESP_ERROR_CHECK(i2c_master_init());
-    ESP_LOGI(I2C_TAG, "I2C initialized successfully");  
+    esp_err_t ret;
+    const int max_retries = 3;
+
+    for (int retry = 0; retry < max_retries; retry++) {
+        ret = i2c_master_init();
+        if (ret == ESP_OK) {
+            ESP_LOGI(I2C_TAG, "I2C initialized successfully");
+            return;
+        }
+
+        ESP_LOGW(I2C_TAG, "I2C init failed (attempt %d/%d): %s", retry + 1, max_retries, esp_err_to_name(ret));
+
+        if (retry < max_retries - 1) {
+            vTaskDelay(pdMS_TO_TICKS(200));  // Wait before retry
+        }
+    }
+
+    // If all retries failed, log error but continue boot (graceful degradation)
+    ESP_LOGE(I2C_TAG, "I2C initialization failed after %d attempts, continuing boot...", max_retries);
 }
 
 

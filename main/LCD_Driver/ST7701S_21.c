@@ -414,15 +414,26 @@ static bool example_on_vsync_event(esp_lcd_panel_handle_t panel, const esp_lcd_r
 }
 
 esp_lcd_panel_handle_t panel_handle = NULL;
+// v1.4: Enhanced LCD initialization with extended delays for boot stability
 void LCD_Init(void)
 {
     /********************* LCD *********************/
     ST7701S_reset();
+
+    // v1.4: Extended delay after reset (ST7701S requires stable power)
+    vTaskDelay(pdMS_TO_TICKS(200));
+
     ST7701S_CS_EN();
-    vTaskDelay(pdMS_TO_TICKS(100));
+
+    // v1.4: Extended delay after CS enable for display stabilization
+    vTaskDelay(pdMS_TO_TICKS(150));
+
     ST7701S_handle st7701s = ST7701S_newObject(LCD_MOSI, LCD_SCLK, LCD_CS, SPI2_HOST, SPI_METHOD);
-    
+
     ST7701S_screen_init(st7701s, 1);
+
+    // v1.4: Critical delay after screen init
+    vTaskDelay(pdMS_TO_TICKS(200));
     #if CONFIG_EXAMPLE_AVOID_TEAR_EFFECT_WITH_SEM
         ESP_LOGI(LCD_TAG, "Create semaphores");
         sem_vsync_end = xSemaphoreCreateBinary();
@@ -489,8 +500,14 @@ void LCD_Init(void)
     ESP_LOGI(LCD_TAG, "Initialize RGB LCD panel");
     ESP_ERROR_CHECK(esp_lcd_panel_reset(panel_handle));
     ESP_ERROR_CHECK(esp_lcd_panel_init(panel_handle));
+
+    // v1.4: Additional delay after panel init for stability
+    vTaskDelay(pdMS_TO_TICKS(100));
+
     ST7701S_CS_Dis();
     Backlight_Init();
+
+    ESP_LOGI(LCD_TAG, "LCD initialization complete, panel_handle=%p", panel_handle);
 }
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Backlight program

@@ -106,3 +106,19 @@ uint8_t RB02_Config_NVS_Store_BluetoothSettings()
     return ret;
 }
 #endif
+
+#ifdef RB_ENABLE_UART
+// v1.4: Get GPS UART baudrate from NVS early (for main.c initialization)
+int32_t RB02_Config_NVS_Get_GpsBaudrate()
+{
+    int32_t baudrate = 9600; // Default
+    nvs_handle_t my_handle;
+    esp_err_t err = nvs_open(NVS_STORAGE, NVS_READONLY, &my_handle);
+    if (err == ESP_OK)
+    {
+        err = nvs_get_i32(my_handle, "uart", &baudrate);
+        nvs_close(my_handle);
+    }
+    return baudrate;
+}
+#endif

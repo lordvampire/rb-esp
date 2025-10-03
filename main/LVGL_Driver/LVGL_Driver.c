@@ -10,8 +10,7 @@ esp_timer_handle_t lvgl_tick_timer = NULL;
 
 
 static void *buf1 = NULL;
-static void *buf2 = NULL;             
-
+static void *buf2 = NULL;
 
 void example_lvgl_flush_cb(lv_disp_drv_t *drv, const lv_area_t *area, lv_color_t *color_map)
 {

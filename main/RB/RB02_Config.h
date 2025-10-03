@@ -139,3 +139,8 @@ void RB02_Config_Set_OperativeBluetooth(uint8_t operative);
 
 // NVS Defines
 #define NVS_STORAGE             "storage"
+
+#ifdef RB_ENABLE_UART
+// v1.4: Get GPS UART baudrate from NVS (for early initialization in main.c)
+int32_t RB02_Config_NVS_Get_GpsBaudrate();
+#endif

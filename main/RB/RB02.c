@@ -1062,6 +1062,10 @@ bool nmea_GGA_mini_parser(const uint8_t *sentence, uint16_t length)
 #ifdef RB_ENABLE_GPS
 void NMEA_ParseBuffer(const uint8_t *data, const int rxBytes, uint8_t SourceId);
 #ifdef RB_ENABLE_UART
+// v1.4: GPS debug counter
+static uint32_t gps_read_count = 0;
+static uint32_t gps_rx_count = 0;
+
 void uart_fetch_data()
 {
   if (GpsSpeed0ForDisable == 0)
@@ -1069,11 +1073,29 @@ void uart_fetch_data()
   // Static buffer to avoid malloc/free overhead and heap fragmentation
   static uint8_t data[UART_RX_BUF_SIZE + 1];
 
+  gps_read_count++;
   const int rxBytes = uart_read_bytes(UART_N, data, UART_RX_BUF_SIZE, 10 / portTICK_PERIOD_MS);
+
+  // v1.4: Debug first 10 reads
+  if (gps_read_count <= 10) {
+    if (rxBytes > 0) {
+      gps_rx_count++;
+      ESP_LOGI("GPS", "Read #%lu: %d bytes received", gps_read_count, rxBytes);
+      ESP_LOG_BUFFER_HEXDUMP("GPS_DATA", data, rxBytes > 32 ? 32 : rxBytes, ESP_LOG_INFO);
+    } else {
+      ESP_LOGI("GPS", "Read #%lu: No data (timeout)", gps_read_count);
+    }
+  }
+
   if (rxBytes > 1)
   {
     data[rxBytes] = 0;
     NMEA_ParseBuffer(data, rxBytes, RB01_GPS_PROTOCOL_UART);
+  }
+
+  // v1.4: Summary after 10 reads
+  if (gps_read_count == 10) {
+    ESP_LOGI("GPS", "=== GPS Summary: %lu/%lu reads had data ===", gps_rx_count, gps_read_count);
   }
 }
 #endif
