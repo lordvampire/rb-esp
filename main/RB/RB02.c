@@ -2690,8 +2690,7 @@ void rb_increase_lvgl_tick(lv_timer_t *t)
     }
     char buf[4 + 4 + 4 + 4 + 4 + 4 + 22];
 
-<<<<<<< HEAD
-    // Cache IMU raw data display (update every ~0.2 units change)
+    // v1.3: Cache IMU raw data display (update every ~0.2 units change)
     static IMUdata lastAccel = {-999, -999, -999};
     static IMUdata lastGyro = {-999, -999, -999};
     if (fabs(Accel.x - lastAccel.x) > 0.2f || fabs(Accel.y - lastAccel.y) > 0.2f || fabs(Accel.z - lastAccel.z) > 0.2f ||
@@ -2704,7 +2703,7 @@ void rb_increase_lvgl_tick(lv_timer_t *t)
         lastGyro = Gyro;
     }
 
-    // Cache filtered IMU data display
+    // v1.3: Cache filtered IMU data display
     static IMUdata lastAccelFilt = {-999, -999, -999};
     static IMUdata lastGyroFilt = {-999, -999, -999};
     IMUdata gyroWithBias = {GyroFiltered.x + GyroBias.x, GyroFiltered.y + GyroBias.y, GyroFiltered.z + GyroBias.z};
