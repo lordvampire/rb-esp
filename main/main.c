@@ -94,6 +94,28 @@ void Driver_Loop(void *parameter)
 }
 
 uint8_t RB02_Config_NVS_Get_BluetoothSettings();
+#ifdef RB_DISPLAY_DEBUG
+// Due to Black Screen problem we are going to investigate the I2C: the PWM may not be ready yet. No issues found, we keep this code as debugging procedure.
+void i2c_scan(void) {
+    static const char *TAG = "i2c";
+    ESP_LOGI(TAG, "I2C scan start");
+    i2c_cmd_handle_t cmd;
+    esp_err_t ret;
+    for (uint8_t addr = 1; addr < 127; addr++) {
+        cmd = i2c_cmd_link_create();
+        i2c_master_start(cmd);
+        i2c_master_write_byte(cmd, (addr << 1) | I2C_MASTER_WRITE, true);
+        i2c_master_stop(cmd);
+        ret = i2c_master_cmd_begin(I2C_MASTER_NUM, cmd, 50 / portTICK_PERIOD_MS);
+        i2c_cmd_link_delete(cmd);
+
+        if (ret == ESP_OK) {
+            ESP_LOGI(TAG, "Found device at 0x%02X", addr);
+        }
+    }
+    ESP_LOGI(TAG, "I2C scan done");
+}
+#endif
 
 // v1.4: Enhanced boot sequence with delays for stability
 void Driver_Init(void)
@@ -111,6 +133,11 @@ void Driver_Init(void)
 
     // v1.4: Critical delay for I2C bus stabilization
     vTaskDelay(pdMS_TO_TICKS(100));
+
+#ifdef RB_DISPLAY_DEBUG
+    i2c_scan();
+    vTaskDelay(pdMS_TO_TICKS(100));
+#endif
 
     ESP_LOGI("BOOT", "Initializing I2C sensors...");
     PCF85063_Init();
@@ -269,7 +296,12 @@ void app_main(void)
     /********************* Demo *********************/
     // Lvgl_Example1();
     //
-    if (false) // Display test minimal routine
+#ifdef RB_DISPLAY_DEBUG
+    const int DisplayDebugTrue = true;
+#else
+    const int DisplayDebugTrue = false;
+#endif
+    if (DisplayDebugTrue) // Display test minimal routine
     {
         Set_Backlight(100);
         lv_obj_set_style_bg_color(lv_scr_act(), lv_color_make(255, 0, 0), 0);
@@ -280,6 +312,11 @@ void app_main(void)
         RB02_Main();
         ESP_LOGI("BOOT", "=== Boot Complete ===");
     }
+
+#ifdef RB_DISPLAY_DEBUG
+    i2c_scan();
+    vTaskDelay(pdMS_TO_TICKS(100));
+#endif
     // lv_demo_widgets();
     // lv_demo_keypad_encoder();
     // lv_demo_benchmark();

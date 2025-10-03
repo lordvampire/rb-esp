@@ -339,7 +339,7 @@ lv_obj_t *uartDropDown = NULL;
 lv_obj_t *kmhDropDown = NULL;
 lv_obj_t *SettingStatus0 = NULL;
 lv_obj_t *SettingStatus1 = NULL;
-lv_obj_t *SettingStatus2 = NULL;
+// TODO: move all objects into the UI structure
 lv_obj_t *SettingStatus3 = NULL;
 lv_obj_t *SettingStatus4 = NULL;
 lv_obj_t *SettingStatus5 = NULL;
@@ -1359,7 +1359,16 @@ void nvsRestoreGMeter()
     printf("Gyro Calibration %.1f %.1f %.1f\n", singletonConfig()->GyroHardwareCalibration.x, singletonConfig()->GyroHardwareCalibration.z, singletonConfig()->GyroHardwareCalibration.z);
 #endif
 
+    compBuffer = 0;
     nvs_get_i16(my_handle, "panAZ", &compBuffer);
+    PanelAlignment.z = compBuffer / (RB_GYRO_CALIBRATION_PRECISION / 2.0);
+
+    compBuffer = 0;
+    nvs_get_i16(my_handle, "panAY", &compBuffer);
+    PanelAlignment.y = compBuffer / (RB_GYRO_CALIBRATION_PRECISION / 2.0);
+
+    compBuffer = 0;
+    nvs_get_i16(my_handle, "panAX", &compBuffer);
     PanelAlignment.x = compBuffer / (RB_GYRO_CALIBRATION_PRECISION / 2.0);
 
     gyroHardwareSetCalibration(GyroFiltered.x, GyroFiltered.y, GyroFiltered.z);
@@ -1492,8 +1501,15 @@ void nvsStoreGyroCalibration()
     calBuffer = singletonConfig()->GyroHardwareCalibration.z * RB_GYRO_CALIBRATION_PRECISION;
     nvs_set_i16(my_handle, "calGZ", calBuffer);
 
-    calBuffer = PanelAlignment.x * (RB_GYRO_CALIBRATION_PRECISION / 2.0);
+    calBuffer = PanelAlignment.z * (RB_GYRO_CALIBRATION_PRECISION / 2.0);
     nvs_set_i16(my_handle, "panAZ", calBuffer);
+
+    calBuffer = PanelAlignment.x * (RB_GYRO_CALIBRATION_PRECISION / 2.0);
+    nvs_set_i16(my_handle, "panAY", calBuffer);
+
+    calBuffer = PanelAlignment.x * (RB_GYRO_CALIBRATION_PRECISION / 2.0);
+    nvs_set_i16(my_handle, "panAX", calBuffer);
+
 
     nvs_close(my_handle);
   }
@@ -2674,6 +2690,7 @@ void rb_increase_lvgl_tick(lv_timer_t *t)
     }
     char buf[4 + 4 + 4 + 4 + 4 + 4 + 22];
 
+<<<<<<< HEAD
     // Cache IMU raw data display (update every ~0.2 units change)
     static IMUdata lastAccel = {-999, -999, -999};
     static IMUdata lastGyro = {-999, -999, -999};
@@ -2702,12 +2719,14 @@ void rb_increase_lvgl_tick(lv_timer_t *t)
         lastGyroFilt = gyroWithBias;
     }
 
-    // Cache attitude display (Roll/Pitch/Yaw)
+    // Cache attitude display (Roll/Pitch/Yaw) - v1.3 optimization with v1.4 panel alignment
     static float lastRoll = -999.0f, lastPitch = -999.0f, lastYaw = -999.0f;
     if (fabs(AttitudeRoll - lastRoll) > 0.2f || fabs(AttitudePitch - lastPitch) > 0.2f || fabs(AttitudeYaw - lastYaw) > 0.2f)
     {
         sprintf(buf, "R:%2.1f P:%2.1f T:%2.1f", AttitudeRoll, AttitudePitch, AttitudeYaw);
         lv_label_set_text(SettingStatus2, buf);
+        lv_label_set_text(singletonConfig()->ui.SettingStatus2, buf);
+        lv_label_set_text(singletonConfig()->ui.panelMountAlignmentLabelHelper, buf);
         lastRoll = AttitudeRoll;
         lastPitch = AttitudePitch;
         lastYaw = AttitudeYaw;
@@ -3987,12 +4006,12 @@ static void Onboard_create_Setup(lv_obj_t *parent)
   }
   if (true)
   {
-    SettingStatus2 = lv_label_create(parent);
-    lv_obj_set_size(SettingStatus2, 400, 20);
-    lv_obj_align(SettingStatus2, LV_ALIGN_CENTER, 0, lineY);
-    lv_obj_set_style_text_font(SettingStatus2, &lv_font_montserrat_16, 0);
-    lv_obj_set_style_text_align(SettingStatus2, LV_TEXT_ALIGN_CENTER, 0);
-    lv_obj_add_style(SettingStatus2, &style_title, LV_STATE_DEFAULT);
+    singletonConfig()->ui.SettingStatus2 = lv_label_create(parent);
+    lv_obj_set_size(singletonConfig()->ui.SettingStatus2, 400, 20);
+    lv_obj_align(singletonConfig()->ui.SettingStatus2, LV_ALIGN_CENTER, 0, lineY);
+    lv_obj_set_style_text_font(singletonConfig()->ui.SettingStatus2, &lv_font_montserrat_16, 0);
+    lv_obj_set_style_text_align(singletonConfig()->ui.SettingStatus2, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_add_style(singletonConfig()->ui.SettingStatus2, &style_title, LV_STATE_DEFAULT);
     lineY += 20;
   }
 

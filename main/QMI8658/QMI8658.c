@@ -51,6 +51,13 @@
  * Supported hardware:
  * - ESP32-S3 2.8" Inch Round display 480x480
  * - https://www.waveshare.com/esp32-s3-touch-lcd-2.8c.htm
+ *
+ *
+ *  Roadmap
+ * 1) Move away the attitude algs and keep this file only as sensor reader
+ * 2) Add Magnetometer
+ * 3) Get Attitude from RB-01
+ *
  */
 #include "QMI8658.h"
 #include "lvgl.h"
@@ -63,8 +70,10 @@ IMUdata Accel;
 IMUdata Gyro;
 
 IMUdata AccelFiltered;
+IMUdata AccelFilteredWithoutPanelAlignment;
 IMUdata AccelFilteredMax;
 IMUdata GyroFiltered;
+IMUdata GyroFilteredWithoutPanelAlignment;
 IMUdata GyroBias;
 
 IMUdata PanelAlignment;
@@ -90,7 +99,7 @@ float FilterMoltiplierOutput = 5.0;
 float FilterMoltiplierGyro = 10.0;
 uint16_t lv_atan2(int x, int y);
 // Define complementary filter constant (adjust as needed)
-float AttitudeBalanceAlpha = 1.0 / 230.0;
+float AttitudeBalanceAlpha = 1.0 / 250.0;
 #define DT 0.1 // Time step HZ
 
 uint8_t Device_addr; // default for SD0/SA0 low, 0x6A if high
@@ -106,6 +115,10 @@ float accelScales, gyroScales;
 float accelScales = 0;
 uint8_t readings[12];
 uint32_t reading_timestamp_us; // timestamp in arduino micros() time
+
+// Matrix rotation for the panel mis-alignment
+// TODO: 20250925 Flight TEST! as a backup if 0 skip
+void PanelAlignmentMatrixApply(IMUdata aS, IMUdata *aB_out, IMUdata ref);
 
 void gyroHardwareCalibrationToZero()
 {
@@ -486,9 +499,11 @@ void getAccelerometer(void)
     Accel.y = Accel.y * accelScales;
     Accel.z = Accel.z * accelScales;
 
-    AccelFiltered.x = (FilterMoltiplier * AccelFiltered.x + Accel.x) / (FilterMoltiplier + 1.0);
-    AccelFiltered.y = (FilterMoltiplier * AccelFiltered.y + Accel.y) / (FilterMoltiplier + 1.0);
-    AccelFiltered.z = (FilterMoltiplier * AccelFiltered.z + Accel.z) / (FilterMoltiplier + 1.0);
+    AccelFilteredWithoutPanelAlignment.x = (FilterMoltiplier * AccelFilteredWithoutPanelAlignment.x + Accel.x) / (FilterMoltiplier + 1.0);
+    AccelFilteredWithoutPanelAlignment.y = (FilterMoltiplier * AccelFilteredWithoutPanelAlignment.y + Accel.y) / (FilterMoltiplier + 1.0);
+    AccelFilteredWithoutPanelAlignment.z = (FilterMoltiplier * AccelFilteredWithoutPanelAlignment.z + Accel.z) / (FilterMoltiplier + 1.0);
+
+    PanelAlignmentMatrixApply(AccelFilteredWithoutPanelAlignment, &AccelFiltered, PanelAlignment);
 }
 
 // Function to calculate roll (bank) from accelerometer
@@ -556,9 +571,11 @@ void getGyroscope(void)
     Gyro.y = Gyro.y * gyroScales;
     Gyro.z = Gyro.z * gyroScales;
 
-    GyroFiltered.x = (FilterMoltiplierGyro * GyroFiltered.x + Gyro.x) / (FilterMoltiplierGyro + 1.0);
-    GyroFiltered.y = (FilterMoltiplierGyro * GyroFiltered.y + Gyro.y) / (FilterMoltiplierGyro + 1.0);
-    GyroFiltered.z = (FilterMoltiplierGyro * GyroFiltered.z + Gyro.z) / (FilterMoltiplierGyro + 1.0);
+    GyroFilteredWithoutPanelAlignment.x = (FilterMoltiplierGyro * GyroFiltered.x + Gyro.x) / (FilterMoltiplierGyro + 1.0);
+    GyroFilteredWithoutPanelAlignment.y = (FilterMoltiplierGyro * GyroFiltered.y + Gyro.y) / (FilterMoltiplierGyro + 1.0);
+    GyroFilteredWithoutPanelAlignment.z = (FilterMoltiplierGyro * GyroFiltered.z + Gyro.z) / (FilterMoltiplierGyro + 1.0);
+
+    PanelAlignmentMatrixApply(GyroFilteredWithoutPanelAlignment, &GyroFiltered, PanelAlignment);
 }
 void getGFactor(void)
 {
@@ -612,22 +629,34 @@ float unwrapAngle(float prev, float current)
 }
 
 // Attitude Panel Pitch Alignment Temporary workaround for demo #85
-void compensate_pitch_down45(IMUdata aS, IMUdata *aB_out,IMUdata ref){
-    // pitch down 45° -> we use pitch = -45 degrees
+void PanelAlignmentMatrixApply(IMUdata aS, IMUdata *aB_out, IMUdata ref)
+{
+    // Due to the high risk routing we add a backup, if 0 skip
+    if (ref.x == 0 && ref.y == 0 && ref.z == 0)
+    {
+        aB_out->x = aS.x;
+        aB_out->y = aS.y;
+        aB_out->z = aS.z;
+        return;
+    }
+
+    // Alignment angles
+    float roll = ref.y * DEG2RAD; // roll left
     float p = ref.x * DEG2RAD;
+    float yaw = ref.z * DEG2RAD; // no yaw
+    float cr = cosf(roll), sr = sinf(roll);
     float cp = cosf(p), sp = sinf(p);
+    float cy = cosf(yaw), sy = sinf(yaw);
 
-
-    // R = Ry(p) (since roll=yaw=0)
+    // Rotation matrix (ZYX order: Rz * Ry * Rx)
     float R[3][3] = {
-        { cp, 0.0f, sp },
-        { 0.0f, 1.0f, 0.0f },
-        { -sp, 0.0f, cp }
-    };
+        {cy * cp, cy * sp * sr - sy * cr, cy * sp * cr + sy * sr},
+        {sy * cp, sy * sp * sr + cy * cr, sy * sp * cr - cy * sr},
+        {-sp, cp * sr, cp * cr}};
 
-    aB_out->x = R[0][0]*aS.x + R[0][1]*aS.y + R[0][2]*aS.z;
-    aB_out->y = R[1][0]*aS.x + R[1][1]*aS.y + R[1][2]*aS.z;
-    aB_out->z = R[2][0]*aS.x + R[2][1]*aS.y + R[2][2]*aS.z;
+    aB_out->x = R[0][0] * aS.x + R[0][1] * aS.y + R[0][2] * aS.z;
+    aB_out->y = R[1][0] * aS.x + R[1][1] * aS.y + R[1][2] * aS.z;
+    aB_out->z = R[2][0] * aS.x + R[2][1] * aS.y + R[2][2] * aS.z;
 }
 
 void getAttitude(void)
@@ -655,8 +684,9 @@ void getAttitude(void)
         // GY <= GZ
         // GZ <= -GX
         // float DEG2RAD = 3.14159265359f / 180.0f;
-        IMUdata panelMountAccel = AccelFiltered;
-        compensate_pitch_down45(AccelFiltered, &panelMountAccel,PanelAlignment);
+        // IMUdata panelMountAccel = AccelFiltered;
+        // Anticipated to RAW
+        // PanelAlignmentMatrixApply(AccelFiltered, &panelMountAccel,PanelAlignment);
 
         // Example: convert gyro values
         float gz_rad = (GyroFiltered.z + GyroBias.z) * DEG2RAD;
@@ -665,9 +695,9 @@ void getAttitude(void)
         // No interference between axis but Q output Roll and Pitch output are swapped
 
         Madgwick_UpdateIMU(gy_rad, gz_rad, gx_rad,
-                           panelMountAccel.y - GPSLateralYAcceleration,                // ROLL
-                           panelMountAccel.z - GPSAccelerationForAttitudeCompensation, // PITCH
-                           panelMountAccel.x                                           // YAW
+                           AccelFiltered.y - GPSLateralYAcceleration,                // ROLL
+                           AccelFiltered.z - GPSAccelerationForAttitudeCompensation, // PITCH
+                           AccelFiltered.x                                           // YAW
         );
 
         // Official setup not working
