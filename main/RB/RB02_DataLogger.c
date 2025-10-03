@@ -25,3 +25,18 @@
  * Dual licensing for commercial agreement is available
  *
 */
+
+
+/*
+
+lv_obj_t *RB02_Datalogger_CreateScreen(lv_obj_t *parent, char *path)
+{
+
+    
+    FILE *f = fopen(path, "w");
+    if (f != NULL)
+    {
+        fprintf(f, "a,b,c,d,e,f,g\n");
+        fclose(f);
+    }
+*/

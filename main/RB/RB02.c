@@ -338,7 +338,7 @@ lv_obj_t *uartDropDown = NULL;
 lv_obj_t *kmhDropDown = NULL;
 lv_obj_t *SettingStatus0 = NULL;
 lv_obj_t *SettingStatus1 = NULL;
-lv_obj_t *SettingStatus2 = NULL;
+// TODO: move all objects into the UI structure
 lv_obj_t *SettingStatus3 = NULL;
 lv_obj_t *SettingStatus4 = NULL;
 lv_obj_t *SettingStatus5 = NULL;
@@ -2690,7 +2690,8 @@ void rb_increase_lvgl_tick(lv_timer_t *t)
             AttitudeRoll,
             AttitudePitch,
             AttitudeYaw);
-    lv_label_set_text(SettingStatus2, buf);
+    lv_label_set_text(singletonConfig()->ui.SettingStatus2, buf);
+    lv_label_set_text(singletonConfig()->ui.panelMountAlignmentLabelHelper, buf);
 
     sprintf(buf, "CX:%2.1f CY:%2.1f CZ:%2.1f BX:%2.1f BY:%2.1f BZ:%2.1f",
             singletonConfig()->GyroHardwareCalibration.x,
@@ -3930,12 +3931,12 @@ static void Onboard_create_Setup(lv_obj_t *parent)
   }
   if (true)
   {
-    SettingStatus2 = lv_label_create(parent);
-    lv_obj_set_size(SettingStatus2, 400, 20);
-    lv_obj_align(SettingStatus2, LV_ALIGN_CENTER, 0, lineY);
-    lv_obj_set_style_text_font(SettingStatus2, &lv_font_montserrat_16, 0);
-    lv_obj_set_style_text_align(SettingStatus2, LV_TEXT_ALIGN_CENTER, 0);
-    lv_obj_add_style(SettingStatus2, &style_title, LV_STATE_DEFAULT);
+    singletonConfig()->ui.SettingStatus2 = lv_label_create(parent);
+    lv_obj_set_size(singletonConfig()->ui.SettingStatus2, 400, 20);
+    lv_obj_align(singletonConfig()->ui.SettingStatus2, LV_ALIGN_CENTER, 0, lineY);
+    lv_obj_set_style_text_font(singletonConfig()->ui.SettingStatus2, &lv_font_montserrat_16, 0);
+    lv_obj_set_style_text_align(singletonConfig()->ui.SettingStatus2, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_add_style(singletonConfig()->ui.SettingStatus2, &style_title, LV_STATE_DEFAULT);
     lineY += 20;
   }
 
