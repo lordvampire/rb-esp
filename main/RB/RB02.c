@@ -2724,7 +2724,10 @@ void rb_increase_lvgl_tick(lv_timer_t *t)
     {
         sprintf(buf, "R:%2.1f P:%2.1f T:%2.1f", AttitudeRoll, AttitudePitch, AttitudeYaw);
         lv_label_set_text(singletonConfig()->ui.SettingStatus2, buf);
-        lv_label_set_text(singletonConfig()->ui.panelMountAlignmentLabelHelper, buf);
+        // v1.4: Only update panel alignment helper label if it exists (created on Settings page)
+        if (singletonConfig()->ui.panelMountAlignmentLabelHelper != NULL) {
+            lv_label_set_text(singletonConfig()->ui.panelMountAlignmentLabelHelper, buf);
+        }
         lastRoll = AttitudeRoll;
         lastPitch = AttitudePitch;
         lastYaw = AttitudeYaw;
