@@ -2718,12 +2718,11 @@ void rb_increase_lvgl_tick(lv_timer_t *t)
         lastGyroFilt = gyroWithBias;
     }
 
-    // Cache attitude display (Roll/Pitch/Yaw) - v1.3 optimization with v1.4 panel alignment
+    // v1.3: Cache attitude display (Roll/Pitch/Yaw) with v1.4 panel alignment
     static float lastRoll = -999.0f, lastPitch = -999.0f, lastYaw = -999.0f;
     if (fabs(AttitudeRoll - lastRoll) > 0.2f || fabs(AttitudePitch - lastPitch) > 0.2f || fabs(AttitudeYaw - lastYaw) > 0.2f)
     {
         sprintf(buf, "R:%2.1f P:%2.1f T:%2.1f", AttitudeRoll, AttitudePitch, AttitudeYaw);
-        lv_label_set_text(SettingStatus2, buf);
         lv_label_set_text(singletonConfig()->ui.SettingStatus2, buf);
         lv_label_set_text(singletonConfig()->ui.panelMountAlignmentLabelHelper, buf);
         lastRoll = AttitudeRoll;
